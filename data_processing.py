@@ -13,18 +13,17 @@ from imblearn.over_sampling import SMOTE
 from typing import Literal
 
 def handle_target_column(df, target=None):
-    if target is None:
-        target = "target"
-
-    if isinstance(target, str):
-        y = df[target]
-        X = df.drop(columns=[target])
-    elif isinstance(target, int):
-        y = df.iloc[:, target]
-        X = df.drop(df.columns[target], axis=1)
-    else:
-        raise ValueError("target must be column name or index")
-    return X, y, target
+    try:
+        if isinstance(target, str):
+            y = df[target]
+            X = df.drop(columns=[target])
+        elif isinstance(target, int):
+            y = df.iloc[:, target]
+            X = df.drop(df.columns[target], axis=1)
+        return X, y
+    except Exception as e:
+        print(e)
+        raise ValueError("target must be column name or index. Or target column is not found")
 
 def tramsform_column(numerical_columns, categorical_column, num_fill_strategy, cat_fill_strategy, add_poly):
     
@@ -53,7 +52,7 @@ def tramsform_column(numerical_columns, categorical_column, num_fill_strategy, c
 def preprocess_data(
     data:pd.DataFrame,
     path_to_save: str,
-    target_column=None,
+    target_column: str,
     nan_strategy: Literal["drop", "fill"] = "fill",
     num_fill_strategy: Literal["mean", "median", "most_frequent"] = "mean",
     cat_fill_strategy: Literal["most_frequent", "constant"] = "most_frequent",
@@ -67,7 +66,7 @@ def preprocess_data(
         df.dropna(inplace=True)
     
     # Handle target column
-    X, y, target_column = handle_target_column(df, target_column)
+    X, y = handle_target_column(df, target_column)
     
     # Detect column types
     num_cols = X.select_dtypes(include=np.number).columns.tolist()
