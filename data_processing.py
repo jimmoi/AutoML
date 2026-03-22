@@ -74,7 +74,6 @@ def preprocess_data(
     
     # Preprocessing
     preprocessor = tramsform_column(num_cols, cat_cols, num_fill_strategy, cat_fill_strategy, add_poly)
-    X = preprocessor.fit_transform(X)
     
     # SMOTE
     if use_smote:
