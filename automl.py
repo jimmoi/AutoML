@@ -85,7 +85,7 @@ class PipelineGraph:
         return self.adj_list.get(node_id, [])
 
 class ACOOptimizer:
-    def __init__(self, graph, n_ants=10, iterations=20, alpha=1.0, beta=2.0, decay=0.1):
+    def __init__(self, graph, n_ants=5, iterations=5, alpha=1.0, beta=2.0, decay=0.1):
         self.graph = graph
         self.n_ants = n_ants
         self.iterations = iterations
@@ -108,17 +108,22 @@ class ACOOptimizer:
         probs = [p / total for p in probs]
         return np.random.choice(successors, p=probs)
 
-    def optimize(self, X, y, scoring='accuracy', verbose=False):
+    def optimize(self, X, y, scoring='accuracy', verbose=False, task_type='classification'):
         best_pipeline = None
         best_score = -np.inf
+        best_path = None
+        failed_count = 0  # Track failed pipeline evaluations
 
         for i in range(self.iterations):
             ant_results = []
             
             for _ in range(self.n_ants):
                 path = self._construct_path()
-                score, pipeline = self._evaluate_path(path, X, y, scoring)
+                score, pipeline = self._evaluate_path(path, X, y, scoring, task_type)
                 ant_results.append((path, score))
+                
+                if score == 0.0:
+                    failed_count += 1
                 
                 if score > best_score:
                     best_score = score
@@ -130,56 +135,191 @@ class ACOOptimizer:
                 print(f"Iteration {i+1}: Best Score = {best_score:.4f}")
                 print(f"Best current Pipeline: {best_path}")
 
+        if verbose and failed_count > 0:
+            print(f"[INFO] Total failed pipelines: {failed_count}/{self.n_ants * self.iterations}")
+
         return best_pipeline, best_score
     
     def _decode_path(self, path):
+        """
+        Decode a path into sklearn Pipeline steps.
+        
+        Handles the merging of feature_selection + TOP_K into a single transformer step.
+        Different feature selectors accept parameters differently:
+        - PCA: uses n_components (float 0-1)
+        - SelectKBest: replaced with SelectPercentile (percentile)
+        - VarianceThreshold/others: use default params
+        - None: skip feature selection
+        """
+        from sklearn.decomposition import PCA
+        from sklearn.feature_selection import SelectKBest, SelectPercentile, VarianceThreshold
+        
         steps = []
         path_params = {}
+        pending_feature_selector = None  # Track pending feature selection
         
         for node_id in path:
             node = self.graph.nodes[node_id]
-            if node.value is None:
+            
+            # Skip virtual nodes
+            if node_id in ('start', 'end') or node.value is None:
                 continue
             
-            match node:
-                case _ if isinstance(node, DiscreteNode):
-                    steps.append((node.name, node.value() if callable(node.value) else node.value))
-                case _ if isinstance(node, ContinuousNode):
-                    params = node.sample_parameters()
-                    path_params[node_id] = params
-                    # steps.append((node.name, params))
-                    
-            # In a full ACO(R) implementation, you would also sample 
-            # hyperparameters from node.params_space here.
+            # Handle feature_selection nodes - store for later combination with TOP_K
+            if 'feature_' in node_id:
+                selector_class = node.value() if callable(node.value) else node.value
+                selector_name = node.name
+                
+                # If selector is None ("none" option), don't pending - just skip
+                if selector_class is None:
+                    pending_feature_selector = None  # Clear any pending
+                else:
+                    pending_feature_selector = (selector_name, selector_class)
+                continue  # Don't add yet - wait for TOP_K
             
+            # Handle TOP_K nodes - merge with pending feature selector
+            if 'topk_' in node_id:
+                topk_value = node.value  # Float like 0.9
+                
+                if pending_feature_selector is not None:
+                    selector_name, selector_class = pending_feature_selector
+                    
+                    # Case 4: Selector is None ("none" feature selection)
+                    if selector_class is None:
+                        pass  # Skip feature selection entirely
+                    
+                    # Case 1: PCA - use n_components parameter
+                    elif selector_class == PCA or (callable(selector_class) and selector_class.__name__ == 'PCA'):
+                        try:
+                            # PCA accepts n_components as float (0-1) for variance ratio
+                            steps.append((selector_name, PCA(n_components=topk_value)))
+                        except Exception:
+                            # Fallback to default
+                            steps.append((selector_name, PCA()))
+                    
+                    # Case 2: SelectKBest - replace with SelectPercentile
+                    elif selector_class == SelectKBest or (callable(selector_class) and 'SelectKBest' in selector_class.__name__):
+                        try:
+                            percentile = int(topk_value * 100)
+                            steps.append((selector_name, SelectPercentile(percentile=percentile)))
+                        except Exception:
+                            # Fallback to default SelectKBest
+                            steps.append((selector_name, SelectKBest()))
+                    
+                    # Case 3: VarianceThreshold or other selectors - use default params
+                    else:
+                        try:
+                            # Instantiate with default parameters
+                            if callable(selector_class):
+                                steps.append((selector_name, selector_class()))
+                            else:
+                                pass  # Unknown selector, skip
+                        except Exception:
+                            pass  # Skip if instantiation fails
+                    
+                    pending_feature_selector = None  # Reset
+                continue
+            
+            # Handle model nodes - append directly
+            if 'model_' in node_id:
+                model_class = node.value() if callable(node.value) else node.value
+                if model_class is not None:
+                    steps.append((node.name, model_class))
+                continue
+            
+            # Handle preprocessor nodes - append directly
+            if 'preprocessor_' in node_id:
+                preprocessor = node.value() if callable(node.value) else node.value
+                if preprocessor is not None:
+                    steps.append((node.name, preprocessor))
+                continue
+        
         return steps
 
     def _construct_path(self):
-        path = ['start'] # Assume a virtual start node
+        path = ['start']
+        visited = {'start'}
         current = 'start'
+        
         while True:
-            nxt = self._select_next_node(current)
-            if nxt is None: break
+            successors = self.graph.get_successors(current)
+            # Filter out already visited nodes to prevent loops and duplicates
+            valid_successors = [s for s in successors if s not in visited]
+            
+            if not valid_successors:
+                break
+            
+            # Use pheromone-based selection from valid successors only
+            probs = []
+            for s in valid_successors:
+                tau = self.graph.pheromones.get((current, s), 0.1)
+                probs.append(tau ** self.alpha)
+            
+            total = sum(probs)
+            probs = [p / total for p in probs]
+            nxt = np.random.choice(valid_successors, p=probs)
+            
             path.append(nxt)
+            visited.add(nxt)
             current = nxt
+            
+            # Stop if we reached 'end'
+            if current == 'end':
+                break
+        
         return path
 
-    def _evaluate_path(self, path, X, y, scoring):
-        # Build sklearn pipeline from path
+    def _evaluate_path(self, path, X, y, scoring='accuracy', task_type='classification'):
+        """
+        Evaluate a pipeline path with dynamic scoring based on task type.
+        
+        Args:
+            path: List of node IDs representing the pipeline path
+            X: Feature data
+            y: Target data
+            scoring: Base scoring metric (overridden by task_type)
+            task_type: 'classification' or 'regression'
+        
+        Returns:
+            tuple: (fitness_score, fitted_pipeline)
+                   fitness_score is always positive (higher is better)
+                   Returns (0.0, None) on failure
+        """
         steps = self._decode_path(path)
         
         try:
+            # Dynamically select scoring metric based on task type
+            if task_type == 'classification':
+                effective_scoring = 'accuracy'
+            elif task_type == 'regression':
+                effective_scoring = 'neg_root_mean_squared_error'
+            else:
+                effective_scoring = scoring
+            
             clf = Pipeline(steps)
-            scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
+            scores = cross_val_score(clf, X, y, cv=5, scoring=effective_scoring, n_jobs=1)
+            mean_score = scores.mean()
             
-            ## for continuous node update archive
-            # for node_id in path:
-            #     if self.graph.nodes[node_id].value is not None:
-            #         self.graph.nodes[node_id].update_archive(path_params[node_id], scores)
+            # Calculate fitness: ensure positive values, higher is better
+            if task_type == 'classification':
+                # Accuracy is already bounded [0,1], higher is better
+                fitness = mean_score
+            elif task_type == 'regression':
+                # Convert neg_mse to positive fitness (lower RMSE = higher fitness)
+                fitness = 1.0 / (1.0 + abs(mean_score))
+            else:
+                fitness = mean_score
             
-            return scores.mean() ,clf
-        except:
-            return 0 ,None # Return poor score for invalid paths
+            return fitness, clf
+            
+        except Exception as e:
+            # Only print rare/uncommon errors to reduce console littering
+            # Common errors (LinAlgError, ConvergenceWarning) are silently ignored
+            error_str = str(e).lower()
+            uncommon_errors = ['invalid', 'unavailable', 'could not']
+            if any(ue in error_str for ue in uncommon_errors):
+                print(f"[DEBUG] Pipeline Failed: {e} | Path: {path}")
+            return 0.0, None
 
     def _update_pheromones(self, results):
         # Evaporation

@@ -4,80 +4,75 @@ from pathlib import Path
 import argparse
 from data_processing import *
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 from automl import *
 from search_space import *
 # from visualization import *
 
+# Aliases for backward compatibility
+feature_selections = FEATURE_SELECTIONS
+models_classifiers = MODELS_CLASSIFIERS
+
 import warnings
 warnings.filterwarnings("ignore")
 
 def create_pipeline(num_cols, cat_cols, args):
-    #----------------
-    # 1. Setup Graph
-    #----------------
-    
     dag = PipelineGraph()
     
-    #----------------------
-    # 2. Define Components
-    #----------------------
-    
-    preprocessors = {}
-    for scaler in SCALERS:
-        preprocessors[scaler] = tramsform_column(num_cols, cat_cols, args.num_fill_strategy, SCALERS[scaler], args.cat_fill_strategy, args.add_poly)
-
-    #----------------
-    # 3. Setup Nodes
-    #----------------
-    
-    # virtual nodes
+    # === Node Setup ===
     dag.add_node('start', DiscreteNode('VirtualStart', None))
     dag.add_node('end', DiscreteNode('VirtualEnd', None))
     
-    # feature scaling nodes
-    for scaler in preprocessors:
-        dag.add_node(scaler, DiscreteNode(f"Preprocessor_{scaler}", preprocessors[scaler]))
-        
-    # K-hyperparameter nodes
-    feature_amount = len(num_cols) + len(cat_cols)
+    # Create preprocessors with prefixed IDs to prevent collision
+    preprocessors = {}
+    for scaler in SCALERS:
+        preprocessors[scaler] = tramsform_column(
+            num_cols, cat_cols, 
+            args.num_fill_strategy, SCALERS[scaler], 
+            args.cat_fill_strategy, args.add_poly
+        )
+        dag.add_node(f"preprocessor_{scaler}", 
+                     DiscreteNode(f"Preprocessor_{scaler}", preprocessors[scaler]))
+    
+    # Create TOP_K nodes with prefixed IDs
     for k in TOP_K:
-        dag.add_node(f"Top_k_{k}", DiscreteNode(f"Top_k_{k}", TOP_K[k]))
+        dag.add_node(f"topk_{k}", 
+                     DiscreteNode(f"Top_k_{k}", TOP_K[k]))
     
-    # feature selection nodes
-    for feature_selection in feature_selections:
-        dag.add_node(feature_selection, DiscreteNode(f"FeatureSelection_{feature_selection}", feature_selections[feature_selection]))
+    # Create feature selection nodes with prefixed IDs
+    for feature_selection in FEATURE_SELECTIONS:
+        dag.add_node(f"feature_{feature_selection}", 
+                     DiscreteNode(f"FeatureSelection_{feature_selection}", FEATURE_SELECTIONS[feature_selection]))
     
-    # model nodes
-    for model in models_classifiers:
-        dag.add_node(model, DiscreteNode(f"Model_{model}", models_classifiers[model]))
+    # Create model nodes with prefixed IDs
+    for model in MODELS_CLASSIFIERS:
+        dag.add_node(f"model_{model}", 
+                     DiscreteNode(f"Model_{model}", MODELS_CLASSIFIERS[model]))
     
-    #------------------------------
-    # 4. Define valid paths (Edges)
-    #------------------------------
+    # === Strict Layered Edges ===
+    # Layer 0 -> Layer 1: start -> preprocessors
+    for scaler in SCALERS:
+        dag.add_edge('start', f"preprocessor_{scaler}")
     
-    # Layer 1: start to feature scaling nodes
-    for preprocessor in preprocessors.keys():
-        dag.add_edge('start', preprocessor)
-        
-    # Layer 2: feature scaling nodes to feature selection or extraction node
-    for preprocessor in preprocessors.keys():
-        for feature_selection in feature_selections.keys():
-            dag.add_edge(preprocessor, feature_selection)
+    # Layer 1 -> Layer 2: preprocessors -> feature_selection
+    for scaler in SCALERS:
+        for feature_selection in FEATURE_SELECTIONS:
+            dag.add_edge(f"preprocessor_{scaler}", f"feature_{feature_selection}")
     
-    # Layer 3: feature selection or extraction node to model nodes
-    for feature_selection in feature_selections.keys():
-        for model in models_classifiers.keys():
-            dag.add_edge(feature_selection, model)
-            
-    # Layer 3.5 : feature selection to k-hyperparameter nodes
-    for feature_selection in feature_selections.keys():
+    # Layer 2 -> Layer 3: feature_selection -> TOP_K
+    for feature_selection in FEATURE_SELECTIONS:
         for k in TOP_K:
-            dag.add_edge(feature_selection, f"Top_k_{k}")
-            
-    # Layer 4: model nodes to end node
-    for model in models_classifiers.keys():
-        dag.add_edge(model, 'end')
+            dag.add_edge(f"feature_{feature_selection}", f"topk_{k}")
+    
+    # Layer 3 -> Layer 4: TOP_K -> models
+    for k in TOP_K:
+        for model in MODELS_CLASSIFIERS:
+            dag.add_edge(f"topk_{k}", f"model_{model}")
+    
+    # Layer 4 -> Layer 5: models -> end
+    for model in MODELS_CLASSIFIERS:
+        dag.add_edge(f"model_{model}", 'end')
     
     return dag
 
@@ -104,11 +99,21 @@ def main(args):
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found at {data_path}")
     data = pd.read_csv(data_path)
+    # sample data if too large to speed up testing (remove for full runs)
+    if len(data) > 5000:
+        data = data.sample(n=5000, random_state=42).reset_index(drop=True)
     
     if args.dropna:
         data.dropna(inplace=True)
         
     X, y = handle_target_column(data, args.target)
+    
+    # Encode target variable for classification tasks (fixes XGBoost class label error)
+    task_type = args.task.lower() if args.task else 'auto'
+    if 'classification' in task_type or task_type == 'auto':
+        le = LabelEncoder()
+        y = le.fit_transform(y)
+    
     num_cols = X.select_dtypes(include=np.number).columns.tolist()
     cat_cols = X.select_dtypes(exclude=np.number).columns.tolist()
     

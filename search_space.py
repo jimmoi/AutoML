@@ -52,7 +52,7 @@ IMBALANCED_TECHNIQUES = {
 }
 
 MODELS_CLASSIFIERS = {
-    "logistic": LogisticRegression,
+    "logistic": lambda: LogisticRegression(max_iter=2000),
     'rf': RandomForestClassifier,
     'svc': SVC,
     'knn': KNeighborsClassifier,
@@ -63,7 +63,7 @@ MODELS_CLASSIFIERS = {
     'xgb': XGBClassifier,
     'mlp': MLPClassifier,
     'lda': LinearDiscriminantAnalysis,
-    'qda': QuadraticDiscriminantAnalysis,
+    'qda': lambda: QuadraticDiscriminantAnalysis(reg_param=0.1),
 }
 # models_regression = {
 #     'rf': {'name': 'RandomForestRegressor', 'component': RandomForestRegressor},

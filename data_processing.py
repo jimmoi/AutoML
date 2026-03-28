@@ -24,8 +24,9 @@ def tramsform_column(numerical_columns, categorical_column, num_fill_strategy, n
     num_steps = []
     num_steps.append(("impute", SimpleImputer(strategy=num_fill_strategy)))
     
+    # Instantiate the scaler class - sklearn Pipeline requires instances, not classes
     if num_scale is not None:
-        num_steps.append(("scale", num_scale))
+        num_steps.append(("scale", num_scale()))  # Fixed: instantiate the class
         
     if add_poly:
         num_steps.append(("poly", PolynomialFeatures(degree=2, include_bias=False)))
