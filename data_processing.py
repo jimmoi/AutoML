@@ -25,7 +25,7 @@ def tramsform_column(numerical_columns, categorical_column, num_fill_strategy, n
     num_steps.append(("impute", SimpleImputer(strategy=num_fill_strategy)))
     
     if num_scale is not None:
-        num_steps.append(("scale", num_scale))
+        num_steps.append(("scale", num_scale()))
         
     if add_poly:
         num_steps.append(("poly", PolynomialFeatures(degree=2, include_bias=False)))

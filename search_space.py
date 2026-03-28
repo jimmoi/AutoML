@@ -15,6 +15,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from xgboost import XGBClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.feature_selection import f_classif
 
 SCALERS = {
     "none": None, 
@@ -24,26 +25,32 @@ SCALERS = {
     "normalizer": Normalizer
 }
 
-FEATURE_SELECTIONS = {
-    "none": None, 
-    "pca": PCA, 
-    "selectkbest": SelectKBest, 
-    "variancethreshold": VarianceThreshold, 
-    "lda": LinearDiscriminantAnalysis
-}
+def prepare_feature_preprocessor(feature_preprocessor):
+    match feature_preprocessor:
+        case "pca":
+            def wrapper(k):
+                return PCA(n_components=k)
+            return wrapper
+        case "selectkbest":
+            def wrapper(k):
+                return SelectKBest(score_func=f_classif, k=k)
+            return wrapper
+        case "variancethreshold":
+            def wrapper(k):
+                return VarianceThreshold(threshold=0.01)
+            return wrapper
+        case "lda":
+            def wrapper(k):
+                return LinearDiscriminantAnalysis(n_components=min(k, len(set(y)) - 1))
+            return wrapper
+    return wrapper
 
-# TOP_K = (1,100) # percentage of features to keep
-TOP_K = {
-    "10":0.1,
-    "20":0.2,
-    "30":0.3,
-    "40":0.4,
-    "50":0.5,
-    "60":0.6,
-    "70":0.7,
-    "80":0.8,
-    "90":0.9,
-    "100":1.0
+FEATURE_PREPROCESSORS = {
+    "none": None, 
+    "pca": prepare_feature_preprocessor("pca"), 
+    "selectkbest": prepare_feature_preprocessor("selectkbest"), 
+    # "variancethreshold": prepare_feature_preprocessor("variancethreshold"), # !Error
+    # "lda": prepare_feature_preprocessor("lda") # !Error
 }
 
 IMBALANCED_TECHNIQUES = {
@@ -60,10 +67,10 @@ MODELS_CLASSIFIERS = {
     'dt': DecisionTreeClassifier,
     'ada': AdaBoostClassifier,
     'gbm': GradientBoostingClassifier,
-    'xgb': XGBClassifier,
+    # 'xgb': XGBClassifier, # !Error y encoder
     'mlp': MLPClassifier,
     'lda': LinearDiscriminantAnalysis,
-    'qda': QuadraticDiscriminantAnalysis,
+    # 'qda': QuadraticDiscriminantAnalysis,  # !Error highly collinear (redundant)
 }
 # models_regression = {
 #     'rf': {'name': 'RandomForestRegressor', 'component': RandomForestRegressor},

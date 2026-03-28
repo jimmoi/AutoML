@@ -93,21 +93,6 @@ class ACOOptimizer:
         self.beta = beta    # Heuristic importance (skipped here for simplicity)
         self.decay = decay
 
-    def _select_next_node(self, current_node):
-        successors = self.graph.get_successors(current_node)
-        if not successors:
-            return None
-        
-        
-        probs = []# Calculate transition probabilities based on pheromones
-        for s in successors:
-            tau = self.graph.pheromones[(current_node, s)]
-            probs.append(tau ** self.alpha)
-        
-        total = sum(probs)
-        probs = [p / total for p in probs]
-        return np.random.choice(successors, p=probs)
-
     def optimize(self, X, y, scoring='accuracy', verbose=False):
         best_pipeline = None
         best_score = -np.inf
@@ -134,25 +119,55 @@ class ACOOptimizer:
     
     def _decode_path(self, path):
         steps = []
-        path_params = {}
+        top_k = None
+        feature_preprocessor_idx = None
         
+        i=0
         for node_id in path:
             node = self.graph.nodes[node_id]
             if node.value is None:
                 continue
-            
-            match node:
-                case _ if isinstance(node, DiscreteNode):
-                    steps.append((node.name, node.value() if callable(node.value) else node.value))
-                case _ if isinstance(node, ContinuousNode):
-                    params = node.sample_parameters()
-                    path_params[node_id] = params
-                    # steps.append((node.name, params))
+            if isinstance(node, DiscreteNode): 
+                match node.name:
+                    case _ if node.name.startswith("sk_preprocessor"):
+                        steps.append((node.name, node.value))
+                        i+=1
+                    case _ if node.name.startswith("sk_feature_preprocessor"):
+                        feature_preprocessor_idx = i
+                        steps.append((node.name, node.value))
+                        i+=1
+                    case _ if node.name.startswith("top_k"):
+                        top_k = node.value
+                    case _:
+                        steps.append((node.name, node.value()))
+                        i+=1
+                # case _ if isinstance(node, ContinuousNode):
+                #     params = node.sample_parameters()
+                #     path_params[node_id] = params
+                #     steps.append((node.name, params))
                     
             # In a full ACO(R) implementation, you would also sample 
             # hyperparameters from node.params_space here.
             
+        if feature_preprocessor_idx is not None:
+            node_name, node_value = steps.pop(feature_preprocessor_idx)
+            steps.insert(feature_preprocessor_idx, (node_name, node_value(top_k)))
+            
         return steps
+    
+    def _select_next_node(self, current_node):
+        successors = self.graph.get_successors(current_node)
+        if not successors:
+            return None
+        
+        probs = [] # Calculate transition probabilities based on pheromones
+        for s in successors:
+            tau = self.graph.pheromones[(current_node, s)]
+            probs.append(tau ** self.alpha)
+        
+        total = sum(probs)
+        probs = [p / total for p in probs]
+        return np.random.choice(successors, p=probs)
 
     def _construct_path(self):
         path = ['start'] # Assume a virtual start node
@@ -170,6 +185,7 @@ class ACOOptimizer:
         
         try:
             clf = Pipeline(steps)
+            print(path)
             scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
             
             ## for continuous node update archive
@@ -178,7 +194,10 @@ class ACOOptimizer:
             #         self.graph.nodes[node_id].update_archive(path_params[node_id], scores)
             
             return scores.mean() ,clf
-        except:
+        except Exception as e:
+            print(steps)
+            print("Invalid path", e)
+            # raise e
             return 0 ,None # Return poor score for invalid paths
 
     def _update_pheromones(self, results):

@@ -37,46 +37,52 @@ def create_pipeline(num_cols, cat_cols, args):
     
     # feature scaling nodes
     for scaler in preprocessors:
-        dag.add_node(scaler, DiscreteNode(f"Preprocessor_{scaler}", preprocessors[scaler]))
-        
+        dag.add_node(scaler, DiscreteNode(f"sk_preprocessor_{scaler}", preprocessors[scaler]))
+    
     # K-hyperparameter nodes
     feature_amount = len(num_cols) + len(cat_cols)
+    def top_k_generate(n_column, n_choice):
+        func2 = lambda x: np.ceil(n_column*(1e3**((x/x.max())-1)))
+        test = np.arange(1,n_choice+1)
+        test[1:] = func2(test)[:-1]
+        return set(test.tolist())
+    TOP_K = top_k_generate(feature_amount, 10)
     for k in TOP_K:
-        dag.add_node(f"Top_k_{k}", DiscreteNode(f"Top_k_{k}", TOP_K[k]))
+        dag.add_node(f"top_k_{k}", DiscreteNode(f"top_k_{k}", k))
     
     # feature selection nodes
-    for feature_selection in feature_selections:
-        dag.add_node(feature_selection, DiscreteNode(f"FeatureSelection_{feature_selection}", feature_selections[feature_selection]))
+    for feature_preprocessor in FEATURE_PREPROCESSORS:
+        dag.add_node(feature_preprocessor, DiscreteNode(f"sk_feature_preprocessor_{feature_preprocessor}", FEATURE_PREPROCESSORS[feature_preprocessor]))
     
     # model nodes
-    for model in models_classifiers:
-        dag.add_node(model, DiscreteNode(f"Model_{model}", models_classifiers[model]))
-    
+    for model in MODELS_CLASSIFIERS:
+        dag.add_node(model, DiscreteNode(f"sk_model_{model}", MODELS_CLASSIFIERS[model]))
+
     #------------------------------
     # 4. Define valid paths (Edges)
     #------------------------------
-    
+
     # Layer 1: start to feature scaling nodes
     for preprocessor in preprocessors.keys():
-        dag.add_edge('start', preprocessor)
-        
+            dag.add_edge('start', preprocessor)
+
     # Layer 2: feature scaling nodes to feature selection or extraction node
     for preprocessor in preprocessors.keys():
-        for feature_selection in feature_selections.keys():
-            dag.add_edge(preprocessor, feature_selection)
-    
-    # Layer 3: feature selection or extraction node to model nodes
-    for feature_selection in feature_selections.keys():
-        for model in models_classifiers.keys():
-            dag.add_edge(feature_selection, model)
-            
-    # Layer 3.5 : feature selection to k-hyperparameter nodes
-    for feature_selection in feature_selections.keys():
+        for feature_preprocessor in FEATURE_PREPROCESSORS.keys():
+            dag.add_edge(preprocessor, feature_preprocessor)
+
+    # Layer 3 : feature selection to k-hyperparameter nodes
+    for feature_preprocessor in FEATURE_PREPROCESSORS.keys():
         for k in TOP_K:
-            dag.add_edge(feature_selection, f"Top_k_{k}")
-            
-    # Layer 4: model nodes to end node
-    for model in models_classifiers.keys():
+            dag.add_edge(feature_preprocessor, f"top_k_{k}")
+
+    # Layer 4: k-hyperparameter nodes to model nodes
+    for k in TOP_K:
+        for model in MODELS_CLASSIFIERS.keys():
+            dag.add_edge(f"top_k_{k}", model)
+
+    # Layer 5: model nodes to end node
+    for model in MODELS_CLASSIFIERS.keys():
         dag.add_edge(model, 'end')
     
     return dag
@@ -104,6 +110,7 @@ def main(args):
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found at {data_path}")
     data = pd.read_csv(data_path)
+    data.drop(columns=["id"], inplace=True)
     
     if args.dropna:
         data.dropna(inplace=True)
@@ -114,8 +121,8 @@ def main(args):
     
     # Perform ML Pipeline Optimization
     dag = create_pipeline(num_cols, cat_cols, args)
-    optimizer = ACOOptimizer(dag, n_ants=100, iterations=30)
-    best_pipeline, best_score = optimizer.optimize(X, y, verbose=True)
+    optimizer = ACOOptimizer(dag, n_ants=50, iterations=50)
+    best_pipeline, best_score = optimizer.optimize(X, y, verbose=True, scoring="f1_macro")
     print(f"Best Pipeline: {best_pipeline}")
     print(f"Best Score: {best_score}")
     
