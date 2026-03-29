@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import random
+import copy
 from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline
 
@@ -85,13 +87,14 @@ class PipelineGraph:
         return self.adj_list.get(node_id, [])
 
 class ACOOptimizer:
-    def __init__(self, graph, n_ants=10, iterations=20, alpha=1.0, beta=2.0, decay=0.1):
+    def __init__(self, graph, n_ants=10, iterations=20, alpha=1.0, beta=2.0, decay=0.1, local_search_iters=5):
         self.graph = graph
         self.n_ants = n_ants
         self.iterations = iterations
         self.alpha = alpha  # Pheromone importance
         self.beta = beta    # Heuristic importance (skipped here for simplicity)
         self.decay = decay
+        self.local_search_iters = local_search_iters
 
     def optimize(self, X, y, scoring='accuracy', verbose=False):
         best_pipeline = None
@@ -118,13 +121,13 @@ class ACOOptimizer:
             if verbose:
                 print(f"Best Score = {best_score:.4f}")
                 print(f"Best current Pipeline: {best_path}")
-                print(2**best_score)
                 print("="*50)
 
         return best_pipeline, best_score
     
     def _decode_path(self, path):
         steps = []
+        param_space = {}
         top_k = None
         feature_preprocessor_idx = None
         
@@ -151,6 +154,10 @@ class ACOOptimizer:
                 #     params = node.sample_parameters()
                 #     path_params[node_id] = params
                 #     steps.append((node.name, params))
+                
+                if node.params_space:
+                    for k, v in node.params_space.items():
+                        param_space[f"{node.name}__{k}"] = v
                     
             # In a full ACO(R) implementation, you would also sample 
             # hyperparameters from node.params_space here.
@@ -159,7 +166,7 @@ class ACOOptimizer:
             node_name, node_value = steps.pop(feature_preprocessor_idx)
             steps.insert(feature_preprocessor_idx, (node_name, node_value(top_k)))
             
-        return steps
+        return steps, param_space
     
     def _select_next_node(self, current_node):
         successors = self.graph.get_successors(current_node)
@@ -187,24 +194,70 @@ class ACOOptimizer:
 
     def _evaluate_path(self, path, X, y, scoring):
         # Build sklearn pipeline from path
-        steps = self._decode_path(path)
+        steps, param_space = self._decode_path(path)
         
         try:
             clf = Pipeline(steps)
-            scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
-            
-            ## for continuous node update archive
-            # for node_id in path:
-            #     if self.graph.nodes[node_id].value is not None:
-            #         self.graph.nodes[node_id].update_archive(path_params[node_id], scores)
-            
-            return scores.mean() ,clf
+            if param_space and self.local_search_iters > 0:
+                best_score, best_pipeline = self._trajectory_local_search(clf, param_space, X, y, scoring)
+                return best_score, best_pipeline
+            else:
+                scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
+                return scores.mean() ,clf
         except Exception as e:
             print(steps)
-            print(clf)
             print("Invalid path", e)
             raise e
-            # return 0 ,None # Return poor score for invalid paths
+
+    def _trajectory_local_search(self, pipeline, param_space, X, y, scoring, initial_temp=1.0, cooling_rate=0.8):
+        # Generate initial random configuration
+        current_params = {}
+        for k, v in param_space.items():
+            current_params[k] = random.choice(v)
+            
+        pipeline.set_params(**current_params)
+        try:
+            current_score = cross_val_score(pipeline, X, y, cv=5, scoring=scoring, n_jobs=-1).mean()
+        except Exception:
+            current_score = -np.inf
+            
+        best_params = copy.deepcopy(current_params)
+        best_score = current_score
+        temp = initial_temp
+        
+        for _ in range(self.local_search_iters):
+            # Generate neighbor by mutating one random parameter
+            neighbor_params = copy.deepcopy(current_params)
+            param_to_mutate = random.choice(list(param_space.keys()))
+            possible_values = param_space[param_to_mutate]
+            
+            if len(possible_values) > 1:
+                current_val = current_params[param_to_mutate]
+                choices = [val for val in possible_values if val != current_val]
+                if choices:
+                    neighbor_params[param_to_mutate] = random.choice(choices)
+                    
+            pipeline.set_params(**neighbor_params)
+            try:
+                next_score = cross_val_score(pipeline, X, y, cv=5, scoring=scoring, n_jobs=-1).mean()
+            except Exception:
+                next_score = -np.inf
+                
+            # Simulated Annealing acceptance criterion
+            diff = next_score - current_score
+            if diff > 0 or (temp > 0 and np.random.rand() < np.exp(diff / temp)):
+                current_params = neighbor_params
+                current_score = next_score
+                
+                if current_score > best_score:
+                    best_score = current_score
+                    best_params = copy.deepcopy(current_params)
+                    
+            temp *= cooling_rate
+            
+        # Return best pipeline configuration
+        pipeline.set_params(**best_params)
+        return best_score, pipeline
 
     def _update_pheromones(self, results):
         # Evaporation

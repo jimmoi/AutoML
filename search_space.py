@@ -98,3 +98,79 @@ MODELS_REGRESSION = {
     "model_lasso": Lasso,
     "model_elasticnet": ElasticNet
 }
+
+MODELS_PARAMS = {
+    "model_logistic": {
+        "C": [0.01, 0.1, 1.0, 10.0, 100.0],
+        "penalty": ["l1", "l2", "elasticnet", None],
+        "solver": ["lbfgs", "liblinear", "saga"]
+    },
+    "model_rf": {
+        "n_estimators": [50, 100, 200, 300],
+        "max_depth": [None, 10, 20, 30, 50],
+        "min_samples_split": [2, 5, 10],
+        "min_samples_leaf": [1, 2, 4]
+    },
+    "model_svc": {
+        "C": [0.1, 1.0, 10.0, 100.0],
+        "kernel": ["linear", "poly", "rbf", "sigmoid"],
+        "gamma": ["scale", "auto", 0.01, 0.1, 1.0]
+    },
+    "model_knn": {
+        "n_neighbors": [3, 5, 7, 9, 11],
+        "weights": ["uniform", "distance"],
+        "p": [1, 2]
+    },
+    "model_nb": {
+        "var_smoothing": [1e-9, 1e-8, 1e-7, 1e-6]
+    },
+    "model_dt": {
+        "max_depth": [None, 10, 20, 30, 50],
+        "min_samples_split": [2, 5, 10],
+        "min_samples_leaf": [1, 2, 4]
+    },
+    "model_ada": {
+        "n_estimators": [50, 100, 200, 300],
+        "learning_rate": [0.01, 0.1, 1.0, 2.0]
+    },
+    "model_gbm": {
+        "n_estimators": [50, 100, 200, 300],
+        "learning_rate": [0.01, 0.1, 0.5, 1.0],
+        "max_depth": [3, 5, 7, 9],
+        "subsample": [0.6, 0.8, 1.0]
+    },
+    "model_xgb": {
+        "n_estimators": [50, 100, 200],
+        "learning_rate": [0.01, 0.1, 0.3],
+        "max_depth": [3, 5, 7],
+        "subsample": [0.6, 0.8, 1.0]
+    },
+    "model_mlp": {
+        "hidden_layer_sizes": [(50,), (100,), (50, 50), (100, 50)],
+        "activation": ["tanh", "relu"],
+        "solver": ["sgd", "adam"],
+        "alpha": [0.0001, 0.001, 0.01]
+    },
+    "model_lda": {
+        "solver": ["svd", "lsqr", "eigen"]
+    },
+    "model_qda": {
+        "reg_param": [0.0, 0.1, 0.5, 0.9]
+    },
+    "model_linear": {
+        "fit_intercept": [True, False]
+    },
+    "model_ridge": {
+        "alpha": [0.1, 1.0, 10.0, 100.0],
+        "solver": ["auto", "svd", "cholesky", "lsqr", "sparse_cg", "sag", "saga"]
+    },
+    "model_lasso": {
+        "alpha": [0.01, 0.1, 1.0, 10.0],
+        "selection": ["cyclic", "random"]
+    },
+    "model_elasticnet": {
+        "alpha": [0.01, 0.1, 1.0, 10.0],
+        "l1_ratio": [0.1, 0.3, 0.5, 0.7, 0.9],
+        "selection": ["cyclic", "random"]
+    }
+}

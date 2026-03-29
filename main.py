@@ -61,7 +61,7 @@ def create_pipeline(num_cols, cat_cols, args, limit_n_feature=10):
     # model nodes
     MODELS = MODELS_CLASSIFIERS if args.task == "classification" else MODELS_REGRESSION
     for model in MODELS:
-        dag.add_node(model, DiscreteNode(f"sk_model_{model}", MODELS[model]))
+        dag.add_node(model, DiscreteNode(f"sk_model_{model}", MODELS[model], params_space=MODELS_PARAMS.get(model, {})))
 
     #------------------------------
     # 4. Define valid paths (Edges)
@@ -137,7 +137,7 @@ def main(args):
             objective = "neg_mean_squared_error"
     config["objective"] = objective
     dag = create_pipeline(num_cols, cat_cols, args, limit_n_feature=5)
-    optimizer = ACOOptimizer(dag, n_ants=30, iterations=25)
+    optimizer = ACOOptimizer(dag, n_ants=30, iterations=25, local_search_iters=10)
     best_pipeline, best_score = optimizer.optimize(X_train, y_train, verbose=True, scoring=objective)
     print(f"Best Pipeline: {best_pipeline}")
     print(f"Best Score: {best_score}")
