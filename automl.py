@@ -85,7 +85,7 @@ class PipelineGraph:
         return self.adj_list.get(node_id, [])
 
 class ACOOptimizer:
-    def __init__(self, graph, n_ants=5, iterations=5, alpha=1.0, beta=2.0, decay=0.1):
+    def __init__(self, graph, n_ants=5, iterations=5, alpha=1.0, beta=2.0, decay=0.7):
         self.graph = graph
         self.n_ants = n_ants
         self.iterations = iterations

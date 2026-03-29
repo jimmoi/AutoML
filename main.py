@@ -25,6 +25,32 @@ models_classifiers = MODELS_CLASSIFIERS
 import warnings
 warnings.filterwarnings("ignore")
 
+def detect_task_type(y):
+    """
+    Automatically detect whether the task is classification or regression.
+    
+    Args:
+        y: Target variable (pandas Series)
+    
+    Returns:
+        'classification' or 'regression'
+    """
+    # Check dtype: object, bool, or category -> classification
+    if y.dtype == 'object' or y.dtype == 'bool' or str(y.dtype) == 'category':
+        return 'classification'
+    
+    # Check unique values
+    unique_count = y.nunique()
+    total_count = len(y)
+    
+    # Classification if: few unique values OR low unique ratio
+    if unique_count <= 10 or (unique_count / total_count < 0.05):
+        return 'classification'
+    
+    # Otherwise, treat as regression
+    return 'regression'
+
+
 def create_pipeline(num_cols, cat_cols, args, task_type='classification', model_dict=None):
     """
     Create the DAG pipeline with task-specific configurations.
@@ -132,7 +158,7 @@ def main(args):
     data_path = Path(args.data)
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found at {data_path}")
-    data = pd.read_csv(data_path)
+    data = pd.read_csv(data_path, sep=None, engine='python')
     # sample data if too large to speed up testing (remove for full runs)
     if len(data) > 5000:
         data = data.sample(n=5000, random_state=42).reset_index(drop=True)
@@ -143,13 +169,23 @@ def main(args):
     X, y = handle_target_column(data, args.target)
     
     # Determine task type and configure accordingly
-    task_type = args.task.lower() if args.task else 'auto'
-    if 'regression' in task_type:
+    task_type_input = args.task.lower() if args.task else 'auto'
+    
+    # Auto-detect task type if 'auto' is specified
+    if task_type_input == 'auto':
+        detected_task = detect_task_type(y)
+        task_type = detected_task
+        print(f"Auto-detected task type: {task_type}")
+    elif 'regression' in task_type_input:
         task_type = 'regression'
+    else:
+        task_type = 'classification'
+    
+    # Assign model dict and label encoder based on task type
+    if task_type == 'regression':
         model_dict = MODELS_REGRESSORS
         apply_label_encoder = False
     else:
-        task_type = 'classification'
         model_dict = MODELS_CLASSIFIERS
         apply_label_encoder = True
     
@@ -163,7 +199,7 @@ def main(args):
     
     # Perform ML Pipeline Optimization with task-specific configuration
     dag = create_pipeline(num_cols, cat_cols, args, task_type=task_type, model_dict=model_dict)
-    optimizer = ACOOptimizer(dag, n_ants=20, iterations=2)
+    optimizer = ACOOptimizer(dag, n_ants=args.n_ants, iterations=args.iterations)
     best_pipeline, best_score = optimizer.optimize(X, y, verbose=True, task_type=task_type)
     print(best_pipeline)
     print(f"Best Score: {best_score:.4f}")
@@ -237,6 +273,8 @@ if __name__ == "__main__":
     parser.add_argument("--data", type=str, required=True, help="Path to the dataset")
     parser.add_argument("--target", type=str, default="target", help="Target column name or index")
     parser.add_argument("--task", type=str, default="Auto", help="Task type [Auto, Classification, Regression]")
+    parser.add_argument("--iterations", type=int, default=10, help="Number of ACO iterations")
+    parser.add_argument("--n_ants", type=int, default=20, help="Number of ants per iteration")
     parser.add_argument("--dropna", type=bool, default=False, help="Drop NaN values")
     parser.add_argument("--num_fill_strategy", type=str, default="mean", help="Numerical fill strategy [mean, median, most_frequent]")
     parser.add_argument("--cat_fill_strategy", type=str, default="most_frequent", help="Categorical fill strategy [most_frequent, constant]")
