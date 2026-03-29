@@ -51,7 +51,7 @@ IMBALANCED_TECHNIQUES = {
 }
 
 MODELS_CLASSIFIERS = {
-    "logistic": lambda: LogisticRegression(max_iter=2000),
+    "logistic": LogisticRegression,
     'rf': RandomForestClassifier,
     'svc': SVC,
     'knn': KNeighborsClassifier,
@@ -62,16 +62,84 @@ MODELS_CLASSIFIERS = {
     'xgb': XGBClassifier,
     'mlp': MLPClassifier,
     'lda': LinearDiscriminantAnalysis,
-    'qda': lambda: QuadraticDiscriminantAnalysis(reg_param=0.1),
+    'qda': QuadraticDiscriminantAnalysis,
 }
 
 MODELS_REGRESSORS = {
-    "lr": lambda: LinearRegression(),
-    "ridge": lambda: Ridge(),
-    "lasso": lambda: Lasso(),
-    "elastic": lambda: ElasticNet(),
+    "lr": LinearRegression,
+    "ridge": Ridge,
+    "lasso": Lasso,
+    "elastic": ElasticNet,
     "rf": RandomForestRegressor,
     "svr": SVR,
+}
+
+MODEL_PARAMS = {
+    "logistic": {
+        "log_c01": {"C": 0.1, "max_iter": 2000},
+        "log_c1": {"C": 1.0, "max_iter": 2000},
+        "log_c100": {"C": 100.0, "max_iter": 2000},
+    },
+    "rf": {
+        "rf_n100": {"n_estimators": 100},
+        "rf_n200": {"n_estimators": 200},
+        "rf_n500": {"n_estimators": 500},
+        "rf_d10": {"max_depth": 10},
+        "rf_d20": {"max_depth": 20},
+    },
+    "svc": {
+        "svc_c1": {"C": 1.0},
+        "svc_c10": {"C": 10.0},
+        "svc_rbf": {"kernel": "rbf"},
+    },
+    "knn": {
+        "knn_5": {"n_neighbors": 5},
+        "knn_10": {"n_neighbors": 10},
+    },
+    "dt": {
+        "dt_d5": {"max_depth": 5},
+        "dt_d10": {"max_depth": 10},
+    },
+    "xgb": {
+        "xgb_d3": {"max_depth": 3},
+        "xgb_d6": {"max_depth": 6},
+        "xgb_lr01": {"learning_rate": 0.1},
+        "xgb_lr001": {"learning_rate": 0.01},
+    },
+    "mlp": {
+        "mlp_100": {"hidden_layer_sizes": (100,)},
+        "mlp_100_100": {"hidden_layer_sizes": (100, 100)},
+    },
+    "gbm": {
+        "gbm_d3": {"max_depth": 3},
+        "gbm_d5": {"max_depth": 5},
+    },
+    "lda": {
+        "lda_2": {"n_components": 2},
+    },
+    "qda": {
+        "qda_reg": {"reg_param": 0.1},
+    },
+    "lr": {
+        "lr_a1": {"alpha": 1.0},
+        "lr_a01": {"alpha": 0.1},
+    },
+    "ridge": {
+        "ridge_a1": {"alpha": 1.0},
+        "ridge_a10": {"alpha": 10.0},
+    },
+    "lasso": {
+        "lasso_a001": {"alpha": 0.01},
+        "lasso_a1": {"alpha": 1.0},
+    },
+    "elastic": {
+        "elastic_01": {"l1_ratio": 0.1},
+        "elastic_05": {"l1_ratio": 0.5},
+    },
+    "svr": {
+        "svr_rbf": {"kernel": "rbf"},
+        "svr_linear": {"kernel": "linear"},
+    },
 }
 
 def get_feature_selections(task_type='classification'):
@@ -85,3 +153,7 @@ def get_feature_selections(task_type='classification'):
     if task_type == 'classification':
         fs["lda"] = LinearDiscriminantAnalysis
     return fs
+
+def get_model_params(model_key):
+    """Get hyperparameters for a specific model."""
+    return MODEL_PARAMS.get(model_key, {})

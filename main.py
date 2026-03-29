@@ -105,6 +105,13 @@ def create_pipeline(num_cols, cat_cols, args, task_type='classification', model_
         dag.add_node(f"model_{model}", 
                      DiscreteNode(f"Model_{model}", model_dict[model]))
     
+    # Create hyperparameter nodes (optional - allows ants to choose specific params)
+    for model in model_dict:
+        params = get_model_params(model)
+        for param_key, param_value in params.items():
+            dag.add_node(f"param_{param_key}", 
+                         DiscreteNode(f"Param_{param_key}", param_value))
+    
     # === Strict Layered Edges ===
     # Layer 0 -> Layer 1: start -> preprocessors
     for scaler in SCALERS:
@@ -130,9 +137,15 @@ def create_pipeline(num_cols, cat_cols, args, task_type='classification', model_
         for model in model_dict:
             dag.add_edge(f"topk_{k}", f"model_{model}")
     
-    # Layer 4 -> Layer 5: models -> end
+    # Layer 4 -> Layer 5: models -> hyperparameter nodes (OPTIONAL)
     for model in model_dict:
+        params = get_model_params(model)
+        # Direct edge: Model -> End (use default params)
         dag.add_edge(f"model_{model}", 'end')
+        # Optional edges: Model -> Param -> End (use specific params)
+        for param_key in params:
+            dag.add_edge(f"model_{model}", f"param_{param_key}")
+            dag.add_edge(f"param_{param_key}", 'end')
     
     return dag
 

@@ -85,27 +85,76 @@ class PipelineGraph:
         return self.adj_list.get(node_id, [])
 
 class ACOOptimizer:
-    def __init__(self, graph, n_ants=5, iterations=5, alpha=1.0, beta=2.0, decay=0.7):
+    def __init__(self, graph, n_ants=5, iterations=5, alpha=0.6, beta=4.0, decay=0.2):
         self.graph = graph
         self.n_ants = n_ants
         self.iterations = iterations
         self.alpha = alpha  # Pheromone importance
         self.beta = beta    # Heuristic importance (skipped here for simplicity)
         self.decay = decay
+        self.pipeline_cache = {}  # Cache for evaluated paths
+        self.cache_hits = 0
+        self.cache_misses = 0
 
+    def _get_heuristic(self, node_id):
+        """
+        Calculate heuristic value for a node based on its type.
+        Higher values indicate more promising components.
+        
+        Args:
+            node_id: The node identifier string
+            
+        Returns:
+            float: Heuristic value between 0 and 1
+        """
+        # Model nodes: favor strong performers
+        if 'model_' in node_id:
+            strong_models = ['xgb', 'rf', 'gbm']
+            medium_models = ['svc', 'mlp']
+            
+            for model in strong_models:
+                if model in node_id:
+                    return 0.8
+            for model in medium_models:
+                if model in node_id:
+                    return 0.5
+            return 0.3
+        
+        # Feature selection nodes: favor effective selectors
+        if 'feature_' in node_id:
+            effective_selectors = ['selectkbest', 'pca']
+            for selector in effective_selectors:
+                if selector in node_id:
+                    return 0.7
+            return 0.4
+        
+        # Hyperparameter nodes: neutral heuristic
+        if 'param_' in node_id:
+            return 0.5
+        
+        # All other nodes: neutral heuristic
+        return 0.5
+    
     def _select_next_node(self, current_node):
         successors = self.graph.get_successors(current_node)
         if not successors:
             return None
         
-        
-        probs = []# Calculate transition probabilities based on pheromones
+        # Calculate transition probabilities using ACO formula:
+        # probability = (pheromone^alpha) * (heuristic^beta)
+        probs = []
         for s in successors:
             tau = self.graph.pheromones[(current_node, s)]
-            probs.append(tau ** self.alpha)
+            heuristic = self._get_heuristic(s)
+            probs.append((tau ** self.alpha) * (heuristic ** self.beta))
         
+        # Safeguard against division by zero
         total = sum(probs)
-        probs = [p / total for p in probs]
+        if total == 0:
+            probs = [1/len(probs) for _ in probs]
+        else:
+            probs = [p / total for p in probs]
+        
         return np.random.choice(successors, p=probs)
 
     def optimize(self, X, y, scoring='accuracy', verbose=False, task_type='classification'):
@@ -154,6 +203,9 @@ class ACOOptimizer:
         steps = []
         path_params = {}
         pending_feature_selector = None  # Track pending feature selection
+        pending_model_class = None  # Track model class for param combination
+        pending_model_name = None  # Track model name
+        collected_params = {}  # Collect hyperparameters from param nodes
         
         for node_id in path:
             node = self.graph.nodes[node_id]
@@ -217,19 +269,48 @@ class ACOOptimizer:
                     pending_feature_selector = None  # Reset
                 continue
             
-            # Handle model nodes - append directly
+            # Handle model nodes - store for later param combination
             if 'model_' in node_id:
-                model_class = node.value() if callable(node.value) else node.value
-                if model_class is not None:
+                model_class = node.value if hasattr(node, 'value') and node.value else node.value
+                if callable(model_class):
+                    pending_model_class = model_class
+                    pending_model_name = node.name
+                    collected_params = {}
+                else:
+                    # No params expected - add directly to steps
                     steps.append((node.name, model_class))
+                    pending_model_class = None
+                continue
+            
+            # Handle hyperparameter nodes - collect params
+            if 'param_' in node_id:
+                if pending_model_class is not None and hasattr(node, 'value'):
+                    param_dict = node.value if isinstance(node.value, dict) else {}
+                    if param_dict:
+                        collected_params.update(param_dict)
                 continue
             
             # Handle preprocessor nodes - append directly
             if 'preprocessor_' in node_id:
-                preprocessor = node.value() if callable(node.value) else node.value
-                if preprocessor is not None:
+                preprocessor = node.value if hasattr(node, 'value') and node.value else node.value
+                if callable(preprocessor):
                     steps.append((node.name, preprocessor))
                 continue
+        
+        # Add model with collected params (if any)
+        if pending_model_class is not None and pending_model_name is not None:
+            try:
+                if collected_params:
+                    model_instance = pending_model_class(**collected_params)
+                else:
+                    model_instance = pending_model_class()
+                steps.append((pending_model_name, model_instance))
+            except Exception:
+                # Fallback to default
+                try:
+                    steps.append((pending_model_name, pending_model_class()))
+                except Exception:
+                    pass
         
         return steps
 
@@ -246,14 +327,20 @@ class ACOOptimizer:
             if not valid_successors:
                 break
             
-            # Use pheromone-based selection from valid successors only
+            # Use pheromone-based selection with heuristic (alpha + beta)
             probs = []
             for s in valid_successors:
                 tau = self.graph.pheromones.get((current, s), 0.1)
-                probs.append(tau ** self.alpha)
+                heuristic = self._get_heuristic(s)
+                probs.append((tau ** self.alpha) * (heuristic ** self.beta))
             
+            # Safeguard against division by zero
             total = sum(probs)
-            probs = [p / total for p in probs]
+            if total == 0:
+                probs = [1/len(probs) for _ in probs]
+            else:
+                probs = [p / total for p in probs]
+            
             nxt = np.random.choice(valid_successors, p=probs)
             
             path.append(nxt)
@@ -269,6 +356,7 @@ class ACOOptimizer:
     def _evaluate_path(self, path, X, y, scoring='accuracy', task_type='classification'):
         """
         Evaluate a pipeline path with dynamic scoring based on task type.
+        Uses caching to avoid redundant evaluations of identical paths.
         
         Args:
             path: List of node IDs representing the pipeline path
@@ -282,6 +370,15 @@ class ACOOptimizer:
                    fitness_score is always positive (higher is better)
                    Returns (0.0, None) on failure
         """
+        # Create hashable cache key from path
+        path_key = tuple(path)
+        
+        # Check cache first
+        if path_key in self.pipeline_cache:
+            self.cache_hits += 1
+            return self.pipeline_cache[path_key]
+        
+        self.cache_misses += 1
         steps = self._decode_path(path)
         
         try:
@@ -308,9 +405,13 @@ class ACOOptimizer:
             else:
                 fitness = mean_score
             
+            # Cache the result (including fitted pipeline)
+            self.pipeline_cache[path_key] = (fitness, clf)
             return fitness, clf
             
         except Exception as e:
+            # Cache failed evaluations to prevent redundant retries
+            self.pipeline_cache[path_key] = (0.0, None)
             return 0.0, None
 
     def _update_pheromones(self, results):
