@@ -173,26 +173,30 @@ def main(args):
         "use_smote": args.use_smote
     }
     
-    # load data
+    # load data - FULL dataset
     data_path = Path(args.data)
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found at {data_path}")
-    data = pd.read_csv(data_path, sep=None, engine='python')
-    # sample data if too large to speed up testing (remove for full runs)
-    if len(data) > 5000:
-        data = data.sample(n=5000, random_state=42).reset_index(drop=True)
+    data_full = pd.read_csv(data_path, sep=None, engine='python')
     
     if args.dropna:
-        data.dropna(inplace=True)
-        
-    X, y = handle_target_column(data, args.target)
+        data_full.dropna(inplace=True)
+    
+    # Extract full data first (for final training)
+    X_full, y_full = handle_target_column(data_full, args.target)
+    
+    # Create SAMPLED dataset for FAST optimization
+    data_sample = data_full
+    sample_size = 5000
+    if len(data_sample) > sample_size:
+        data_sample = data_sample.sample(n=sample_size, random_state=42).reset_index(drop=True)
     
     # Determine task type and configure accordingly
     task_type_input = args.task.lower() if args.task else 'auto'
     
-    # Auto-detect task type if 'auto' is specified
+    # Auto-detect task type if 'auto' is specified (using full data for detection)
     if task_type_input == 'auto':
-        detected_task = detect_task_type(y)
+        detected_task = detect_task_type(y_full)
         task_type = detected_task
         print(f"Auto-detected task type: {task_type}")
     elif 'regression' in task_type_input:
@@ -208,20 +212,42 @@ def main(args):
         model_dict = MODELS_CLASSIFIERS
         apply_label_encoder = True
     
+    # Prepare SAMPLED data for optimization phase
+    X_sample, y_sample = handle_target_column(data_sample, args.target)
+    
     # LabelEncoder ONLY for classification (fixes XGBoost class label error)
     if apply_label_encoder:
         le = LabelEncoder()
-        y = le.fit_transform(y)
+        y_sample = le.fit_transform(y_sample)
+        # Also transform full data
+        y_full = le.transform(y_full)
     
-    num_cols = X.select_dtypes(include=np.number).columns.tolist()
-    cat_cols = X.select_dtypes(exclude=np.number).columns.tolist()
+    num_cols = X_sample.select_dtypes(include=np.number).columns.tolist()
+    cat_cols = X_sample.select_dtypes(exclude=np.number).columns.tolist()
     
-    # Perform ML Pipeline Optimization with task-specific configuration
+    # Perform ML Pipeline Optimization on SAMPLED data (for speed)
     dag = create_pipeline(num_cols, cat_cols, args, task_type=task_type, model_dict=model_dict)
     optimizer = ACOOptimizer(dag, n_ants=args.n_ants, iterations=args.iterations, top_k=args.top_k)
-    best_pipeline, best_score, top_k_pipelines = optimizer.optimize(X, y, verbose=True, task_type=task_type)
+    best_pipeline, best_score, top_k_pipelines = optimizer.optimize(X_sample, y_sample, verbose=True, task_type=task_type)
     print(best_pipeline)
-    print(f"Best Score: {best_score:.4f}")
+    print(f"Best Score (on sample): {best_score:.4f}")
+    
+    # ========================================
+    # FULL TRAINING PHASE - Train on complete dataset
+    # ========================================
+    
+    # Re-train best pipeline on FULL data
+    best_pipeline.fit(X_full, y_full)
+    
+    # Re-train each pipeline in top_k_pipelines on FULL data
+    top_k_pipelines_full = []
+    for score, pipe, path in top_k_pipelines:
+        try:
+            pipe.fit(X_full, y_full)
+            top_k_pipelines_full.append((score, pipe, path))
+        except Exception as e:
+            print(f"Failed to retrain pipeline: {e}")
+            continue
     
     # ========================================
     # Results Export and Visualization
@@ -231,13 +257,12 @@ def main(args):
         with open(os.path.join(experiment_path, "config.json"), "w") as f:
             json.dump(config, f, indent=4)
         
-        # Save best model
+        # Save best model (trained on full data)
         joblib.dump(best_pipeline, os.path.join(experiment_path, "model.pkl"))
         
-        # Single Model Evaluation
-        best_pipeline.fit(X, y)
-        y_pred_single = best_pipeline.predict(X)
-        single_metrics = evaluate_comprehensive(y, y_pred_single, task_type, best_score, experiment_path)
+        # Single Model Evaluation (on FULL data)
+        y_pred_single = best_pipeline.predict(X_full)
+        single_metrics = evaluate_comprehensive(y_full, y_pred_single, task_type, best_score, experiment_path)
         
         # Pheromone Visualization
         try:
@@ -246,16 +271,16 @@ def main(args):
         except Exception as e:
             print(f"Visualization failed: {e}")
         
-        # Ensemble Evaluation (if at least 2 unique pipelines)
+        # Ensemble Evaluation (if at least 2 unique pipelines, trained on FULL data)
         ensemble_metrics = None
         ensemble = None
-        if top_k_pipelines and len(top_k_pipelines) >= 2:
-            ensemble = create_ensemble(top_k_pipelines, task_type)
+        if top_k_pipelines_full and len(top_k_pipelines_full) >= 2:
+            ensemble = create_ensemble(top_k_pipelines_full, task_type)
             if ensemble:
                 try:
-                    ensemble.fit(X, y)
-                    y_pred_ensemble = ensemble.predict(X)
-                    ensemble_metrics = evaluate_comprehensive(y, y_pred_ensemble, task_type, best_score, experiment_path)
+                    # Ensemble is already fitted on full data above via create_ensemble
+                    y_pred_ensemble = ensemble.predict(X_full)
+                    ensemble_metrics = evaluate_comprehensive(y_full, y_pred_ensemble, task_type, best_score, experiment_path)
                 except Exception as e:
                     print(f"Ensemble evaluation failed: {e}")
                     ensemble_metrics = None
