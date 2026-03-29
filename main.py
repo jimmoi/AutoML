@@ -2,8 +2,16 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import argparse
+import json
+import joblib
 from data_processing import *
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import (
+    classification_report, 
+    confusion_matrix, 
+    ConfusionMatrixDisplay,
+    r2_score,
+    mean_squared_error
+)
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 from automl import *
@@ -155,27 +163,72 @@ def main(args):
     
     # Perform ML Pipeline Optimization with task-specific configuration
     dag = create_pipeline(num_cols, cat_cols, args, task_type=task_type, model_dict=model_dict)
-    optimizer = ACOOptimizer(dag, n_ants=20, iterations=10)
+    optimizer = ACOOptimizer(dag, n_ants=20, iterations=2)
     best_pipeline, best_score = optimizer.optimize(X, y, verbose=True, task_type=task_type)
-    print(f"Best Pipeline: {best_pipeline}")
-    print(f"Best Score: {best_score}")
+    print(best_pipeline)
+    print(f"Best Score: {best_score:.4f}")
     
-    # # save model
-    # joblib.dump(model, experiment_path / "model.pkl")
+    # ========================================
+    # Results Export and Visualization
+    # ========================================
+    try:
+        joblib.dump(best_pipeline, experiment_path / "model.pkl")
+        
+        with open(experiment_path / "config.json", "w") as f:
+            json.dump(config, f, indent=4)
+        
+        best_pipeline.fit(X, y)
+        y_pred = best_pipeline.predict(X)
+        
+        if task_type == 'classification':
+            plt.figure(figsize=(10, 7))
+            cm = confusion_matrix(y, y_pred)
+            disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+            disp.plot()
+            plt.title(f"Confusion Matrix - Best Score: {best_score:.4f}")
+            plt.savefig(experiment_path / "confusion_matrix.png", dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            report = classification_report(y, y_pred)
+            with open(experiment_path / "metrics_report.txt", "w") as f:
+                f.write("=" * 50 + "\n")
+                f.write("CLASSIFICATION METRICS REPORT\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(f"Best Score (Accuracy): {best_score:.4f}\n\n")
+                f.write("Classification Report:\n")
+                f.write("-" * 50 + "\n")
+                f.write(report)
+        else:
+            plt.figure(figsize=(10, 7))
+            plt.scatter(y, y_pred, alpha=0.5, edgecolors='k', linewidths=0.5)
+            
+            min_val = min(min(y), min(y_pred))
+            max_val = max(max(y), max(y_pred))
+            plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction')
+            
+            plt.xlabel("Actual Values")
+            plt.ylabel("Predicted Values")
+            plt.title(f"Predicted vs Actual - R2: {best_score:.4f}")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.savefig(experiment_path / "predicted_vs_actual.png", dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            r2 = r2_score(y, y_pred)
+            rmse = np.sqrt(mean_squared_error(y, y_pred))
+            
+            with open(experiment_path / "metrics_report.txt", "w") as f:
+                f.write("=" * 50 + "\n")
+                f.write("REGRESSION METRICS REPORT\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(f"Best Score (R2): {best_score:.4f}\n")
+                f.write(f"R2 Score: {r2:.4f}\n")
+                f.write(f"RMSE: {rmse:.4f}\n")
+            
+    except Exception as e:
+        print(f"Export failed: {e}")
     
-    # # Visualize Results
-    # plt.figure(figsize=(10, 7))
-    # cm = confusion_matrix(y_test, y_pred)
-    # disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=model.classes_)
-    # disp.plot()
-    # plt.savefig(experiment_path / "confusion_matrix.png")
-    
-    # # Save Results
-    # print(classification_report(y_test, y_pred), file=open(experiment_path / "classification_report.txt", "w"))
-    
-    # # save config
-    # with open(experiment_path / "config.json", "w") as f:
-    #     json.dump(config, f, indent=4)
+    print(f"\nResults exported to: experiments/{args.name}/")
     
 
 if __name__ == "__main__":

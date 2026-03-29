@@ -135,9 +135,6 @@ class ACOOptimizer:
                 print(f"Iteration {i+1}: Best Score = {best_score:.4f}")
                 print(f"Best current Pipeline: {best_path}")
 
-        if verbose and failed_count > 0:
-            print(f"[INFO] Total failed pipelines: {failed_count}/{self.n_ants * self.iterations}")
-
         return best_pipeline, best_score
     
     def _decode_path(self, path):
@@ -314,12 +311,6 @@ class ACOOptimizer:
             return fitness, clf
             
         except Exception as e:
-            # Only print rare/uncommon errors to reduce console littering
-            # Common errors (LinAlgError, ConvergenceWarning) are silently ignored
-            error_str = str(e).lower()
-            uncommon_errors = ['invalid', 'unavailable', 'could not']
-            if any(ue in error_str for ue in uncommon_errors):
-                print(f"[DEBUG] Pipeline Failed: {e} | Path: {path}")
             return 0.0, None
 
     def _update_pheromones(self, results):
