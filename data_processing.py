@@ -18,7 +18,7 @@ def handle_target_column(df, target=None):
         print(e)
         raise ValueError("target must be column name or index. Or target column is not found")
 
-def tramsform_column(numerical_columns, categorical_column, num_fill_strategy, num_scale, cat_fill_strategy, add_poly):
+def tramsform_column(numerical_columns, categorical_columns, num_fill_strategy, num_scale, cat_fill_strategy, add_poly):
     
     # Numeric pipeline
     num_steps = []
@@ -32,18 +32,22 @@ def tramsform_column(numerical_columns, categorical_column, num_fill_strategy, n
         num_steps.append(("poly", PolynomialFeatures(degree=2, include_bias=False)))
     num_pipeline = Pipeline(num_steps)
     
-    # Categorical pipeline
-    cat_steps = []
-    cat_steps.append(("impute", SimpleImputer(strategy=cat_fill_strategy)))
-    cat_steps.append(("onehot", OneHotEncoder(handle_unknown="ignore")))
-    cat_pipeline = Pipeline(cat_steps)
+    # Build transformers list dynamically based on available columns
+    transformers = [("num", num_pipeline, numerical_columns)]
     
-    # Combine pipelines
+    # Only add categorical pipeline if there are categorical columns
+    if len(categorical_columns) > 0:
+        cat_steps = []
+        cat_steps.append(("impute", SimpleImputer(strategy=cat_fill_strategy)))
+        cat_steps.append(("onehot", OneHotEncoder(handle_unknown="ignore")))
+        cat_pipeline = Pipeline(cat_steps)
+        transformers.append(("cat", cat_pipeline, categorical_columns))
+    
+    # Combine pipelines dynamically
     preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", num_pipeline, numerical_columns),
-            ("cat", cat_pipeline, categorical_column)
-        ])
+        transformers=transformers,
+        remainder='drop'  # Drop any unspecified columns
+    )
     
     return preprocessor
 

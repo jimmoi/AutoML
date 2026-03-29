@@ -1,17 +1,16 @@
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, Normalizer
 from imblearn.over_sampling import SMOTE
 
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, VarianceThreshold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.svm import SVC, SVR
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import AdaBoostClassifier
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 from xgboost import XGBClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
@@ -29,7 +28,7 @@ FEATURE_SELECTIONS = {
     "pca": PCA, 
     "selectkbest": SelectKBest, 
     "variancethreshold": VarianceThreshold, 
-    "lda": LinearDiscriminantAnalysis
+    # LDA is only for classification - conditionally added in main.py
 }
 
 # TOP_K = (1,100) # percentage of features to keep
@@ -65,7 +64,24 @@ MODELS_CLASSIFIERS = {
     'lda': LinearDiscriminantAnalysis,
     'qda': lambda: QuadraticDiscriminantAnalysis(reg_param=0.1),
 }
-# models_regression = {
-#     'rf': {'name': 'RandomForestRegressor', 'component': RandomForestRegressor},
-#     'svc': {'name': 'SVR', 'component': SVR}
-# }
+
+MODELS_REGRESSORS = {
+    "lr": lambda: LinearRegression(),
+    "ridge": lambda: Ridge(),
+    "lasso": lambda: Lasso(),
+    "elastic": lambda: ElasticNet(),
+    "rf": RandomForestRegressor,
+    "svr": SVR,
+}
+
+def get_feature_selections(task_type='classification'):
+    """Get feature selections dict, including LDA only for classification."""
+    fs = {
+        "none": None, 
+        "pca": PCA, 
+        "selectkbest": SelectKBest, 
+        "variancethreshold": VarianceThreshold, 
+    }
+    if task_type == 'classification':
+        fs["lda"] = LinearDiscriminantAnalysis
+    return fs

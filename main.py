@@ -17,8 +17,25 @@ models_classifiers = MODELS_CLASSIFIERS
 import warnings
 warnings.filterwarnings("ignore")
 
-def create_pipeline(num_cols, cat_cols, args):
+def create_pipeline(num_cols, cat_cols, args, task_type='classification', model_dict=None):
+    """
+    Create the DAG pipeline with task-specific configurations.
+    
+    Args:
+        num_cols: List of numeric column names
+        cat_cols: List of categorical column names
+        args: Command-line arguments
+        task_type: 'classification' or 'regression'
+        model_dict: Dictionary of models to use (MODELS_CLASSIFIERS or MODELS_REGRESSORS)
+    """
     dag = PipelineGraph()
+    
+    # Use default model dict if not provided
+    if model_dict is None:
+        model_dict = MODELS_CLASSIFIERS
+    
+    # Get feature selections based on task type (LDA only for classification)
+    feature_selections = get_feature_selections(task_type)
     
     # === Node Setup ===
     dag.add_node('start', DiscreteNode('VirtualStart', None))
@@ -40,38 +57,47 @@ def create_pipeline(num_cols, cat_cols, args):
         dag.add_node(f"topk_{k}", 
                      DiscreteNode(f"Top_k_{k}", TOP_K[k]))
     
-    # Create feature selection nodes with prefixed IDs
-    for feature_selection in FEATURE_SELECTIONS:
+    # Create feature selection nodes with prefixed IDs (task-specific)
+    for feature_selection in feature_selections:
         dag.add_node(f"feature_{feature_selection}", 
-                     DiscreteNode(f"FeatureSelection_{feature_selection}", FEATURE_SELECTIONS[feature_selection]))
+                     DiscreteNode(f"FeatureSelection_{feature_selection}", feature_selections[feature_selection]))
     
-    # Create model nodes with prefixed IDs
-    for model in MODELS_CLASSIFIERS:
+    # Create SMOTE node if requested and classification
+    if args.use_smote and task_type == 'classification':
+        dag.add_node('smote', DiscreteNode('SMOTE', SMOTE()))
+    
+    # Create model nodes with prefixed IDs (task-specific)
+    for model in model_dict:
         dag.add_node(f"model_{model}", 
-                     DiscreteNode(f"Model_{model}", MODELS_CLASSIFIERS[model]))
+                     DiscreteNode(f"Model_{model}", model_dict[model]))
     
     # === Strict Layered Edges ===
     # Layer 0 -> Layer 1: start -> preprocessors
     for scaler in SCALERS:
         dag.add_edge('start', f"preprocessor_{scaler}")
     
-    # Layer 1 -> Layer 2: preprocessors -> feature_selection
+    # Layer 1 -> Layer 2: preprocessors -> feature_selection (or preprocessors -> SMOTE -> feature_selection)
     for scaler in SCALERS:
-        for feature_selection in FEATURE_SELECTIONS:
-            dag.add_edge(f"preprocessor_{scaler}", f"feature_{feature_selection}")
+        if args.use_smote and task_type == 'classification':
+            dag.add_edge(f"preprocessor_{scaler}", 'smote')
+            for feature_selection in feature_selections:
+                dag.add_edge('smote', f"feature_{feature_selection}")
+        else:
+            for feature_selection in feature_selections:
+                dag.add_edge(f"preprocessor_{scaler}", f"feature_{feature_selection}")
     
     # Layer 2 -> Layer 3: feature_selection -> TOP_K
-    for feature_selection in FEATURE_SELECTIONS:
+    for feature_selection in feature_selections:
         for k in TOP_K:
             dag.add_edge(f"feature_{feature_selection}", f"topk_{k}")
     
     # Layer 3 -> Layer 4: TOP_K -> models
     for k in TOP_K:
-        for model in MODELS_CLASSIFIERS:
+        for model in model_dict:
             dag.add_edge(f"topk_{k}", f"model_{model}")
     
     # Layer 4 -> Layer 5: models -> end
-    for model in MODELS_CLASSIFIERS:
+    for model in model_dict:
         dag.add_edge(f"model_{model}", 'end')
     
     return dag
@@ -108,19 +134,29 @@ def main(args):
         
     X, y = handle_target_column(data, args.target)
     
-    # Encode target variable for classification tasks (fixes XGBoost class label error)
+    # Determine task type and configure accordingly
     task_type = args.task.lower() if args.task else 'auto'
-    if 'classification' in task_type or task_type == 'auto':
+    if 'regression' in task_type:
+        task_type = 'regression'
+        model_dict = MODELS_REGRESSORS
+        apply_label_encoder = False
+    else:
+        task_type = 'classification'
+        model_dict = MODELS_CLASSIFIERS
+        apply_label_encoder = True
+    
+    # LabelEncoder ONLY for classification (fixes XGBoost class label error)
+    if apply_label_encoder:
         le = LabelEncoder()
         y = le.fit_transform(y)
     
     num_cols = X.select_dtypes(include=np.number).columns.tolist()
     cat_cols = X.select_dtypes(exclude=np.number).columns.tolist()
     
-    # Perform ML Pipeline Optimization
-    dag = create_pipeline(num_cols, cat_cols, args)
-    optimizer = ACOOptimizer(dag, n_ants=100, iterations=30)
-    best_pipeline, best_score = optimizer.optimize(X, y, verbose=True)
+    # Perform ML Pipeline Optimization with task-specific configuration
+    dag = create_pipeline(num_cols, cat_cols, args, task_type=task_type, model_dict=model_dict)
+    optimizer = ACOOptimizer(dag, n_ants=20, iterations=10)
+    best_pipeline, best_score = optimizer.optimize(X, y, verbose=True, task_type=task_type)
     print(f"Best Pipeline: {best_pipeline}")
     print(f"Best Score: {best_score}")
     

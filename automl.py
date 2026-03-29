@@ -292,7 +292,7 @@ class ACOOptimizer:
             if task_type == 'classification':
                 effective_scoring = 'accuracy'
             elif task_type == 'regression':
-                effective_scoring = 'neg_root_mean_squared_error'
+                effective_scoring = 'r2'
             else:
                 effective_scoring = scoring
             
@@ -305,8 +305,9 @@ class ACOOptimizer:
                 # Accuracy is already bounded [0,1], higher is better
                 fitness = mean_score
             elif task_type == 'regression':
-                # Convert neg_mse to positive fitness (lower RMSE = higher fitness)
-                fitness = 1.0 / (1.0 + abs(mean_score))
+                # R2 score ranges from 0-1, higher is better.
+                # Use max(0, score) since R2 can be negative for very poor models.
+                fitness = max(0.0, mean_score)
             else:
                 fitness = mean_score
             
