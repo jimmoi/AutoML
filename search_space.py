@@ -53,7 +53,7 @@ IMBALANCED_TECHNIQUES = {
 MODELS_CLASSIFIERS = {
     "logistic": LogisticRegression,
     'rf': RandomForestClassifier,
-    'svc': SVC,
+    'svc': lambda: SVC(probability=True),  # Enable probability for soft voting
     'knn': KNeighborsClassifier,
     'nb': GaussianNB,
     'dt': DecisionTreeClassifier,
@@ -88,9 +88,9 @@ MODEL_PARAMS = {
         "rf_d20": {"max_depth": 20},
     },
     "svc": {
-        "svc_c1": {"C": 1.0},
-        "svc_c10": {"C": 10.0},
-        "svc_rbf": {"kernel": "rbf"},
+        "svc_c1": {"C": 1.0, "probability": True},
+        "svc_c10": {"C": 10.0, "probability": True},
+        "svc_rbf": {"kernel": "rbf", "probability": True},
     },
     "knn": {
         "knn_5": {"n_neighbors": 5},

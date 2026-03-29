@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline
+import matplotlib.pyplot as plt
+import seaborn as sns
+import networkx as nx
 
 class DiscreteNode:
     """Represents a specific step in the ML pipeline (e.g., PCA, SVM)."""
@@ -85,16 +88,19 @@ class PipelineGraph:
         return self.adj_list.get(node_id, [])
 
 class ACOOptimizer:
-    def __init__(self, graph, n_ants=5, iterations=5, alpha=0.6, beta=4.0, decay=0.2):
+    def __init__(self, graph, n_ants=5, iterations=5, alpha=0.6, beta=4.0, decay=0.2, top_k=3):
         self.graph = graph
         self.n_ants = n_ants
         self.iterations = iterations
         self.alpha = alpha  # Pheromone importance
-        self.beta = beta    # Heuristic importance (skipped here for simplicity)
+        self.beta = beta    # Heuristic importance
         self.decay = decay
+        self.top_k = top_k  # Number of top pipelines for ensemble
         self.pipeline_cache = {}  # Cache for evaluated paths
         self.cache_hits = 0
         self.cache_misses = 0
+        self.top_k_pipelines = []  # Hall of Fame: [(score, pipeline, path), ...]
+        self.top_k_paths = []  # Store paths for diversity check
 
     def _get_heuristic(self, node_id):
         """
@@ -135,6 +141,126 @@ class ACOOptimizer:
         # All other nodes: neutral heuristic
         return 0.5
     
+    def update_hall_of_fame(self, score, pipeline, path):
+        """Update Top-K Hall of Fame with new pipeline."""
+        if pipeline is None or score <= 0:
+            return
+        
+        # Only add if not duplicate path
+        path_str = str(path)
+        existing_paths = [str(p) for _, _, p in self.top_k_pipelines]
+        
+        if path_str not in existing_paths:
+            self.top_k_pipelines.append((score, pipeline, path))
+            
+            # Sort by score descending
+            self.top_k_pipelines.sort(key=lambda x: x[0], reverse=True)
+            
+            # Keep only top K
+            self.top_k_pipelines = self.top_k_pipelines[:self.top_k]
+    
+    def visualize_pheromones(self, save_path='pheromone_heatmap.png'):
+        """Generate heatmap of pheromone concentrations between nodes."""
+        import os
+        
+        nodes = list(self.graph.nodes.keys())
+        n = len(nodes)
+        
+        if n == 0:
+            return
+        
+        pheromone_matrix = np.zeros((n, n))
+        node_to_idx = {node: i for i, node in enumerate(nodes)}
+        
+        for (from_node, to_node), value in self.graph.pheromones.items():
+            if from_node in node_to_idx and to_node in node_to_idx:
+                i, j = node_to_idx[from_node], node_to_idx[to_node]
+                pheromone_matrix[i, j] = value
+        
+        plt.figure(figsize=(12, 10))
+        sns.heatmap(pheromone_matrix, xticklabels=nodes, yticklabels=nodes, 
+                    cmap='YlOrRd', annot=False, cbar_kws={'label': 'Pheromone Intensity'})
+        plt.title('ACO Pheromone Concentration Heatmap')
+        plt.xlabel('To Node')
+        plt.ylabel('From Node')
+        plt.xticks(rotation=90, fontsize=6)
+        plt.yticks(fontsize=6)
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    def visualize_pheromone_network(self, save_path='pheromone_network.png'):
+        """Plot graph with edge thickness representing pheromone concentration."""
+        
+        G = nx.DiGraph()
+        
+        for node in self.graph.nodes.keys():
+            G.add_node(node)
+        
+        # Filter: Only show significant pheromone trails (threshold > 1.0)
+        for (from_node, to_node), value in self.graph.pheromones.items():
+            if value > 1.0:  # Increased threshold to remove ghost trails
+                G.add_edge(from_node, to_node, weight=value)
+        
+        if G.number_of_nodes() == 0 or G.number_of_edges() == 0:
+            plt.figure(figsize=(14, 10))
+            plt.text(0.5, 0.5, 'No significant pheromone trails found', 
+                    ha='center', va='center', fontsize=14)
+            plt.axis('off')
+            plt.savefig(save_path, dpi=150, bbox_inches='tight')
+            plt.close()
+            return
+        
+        plt.figure(figsize=(16, 12))
+        
+        # Layout optimization: Increase k and iterations for better spacing
+        try:
+            pos = nx.spring_layout(G, k=5.0, iterations=100)
+        except:
+            pos = nx.circular_layout(G)
+        
+        edges = G.edges()
+        
+        if not edges:
+            return
+        
+        # Edge scaling: Logarithmic scale with cap
+        weights = [G[u][v]['weight'] for u, v in edges]
+        max_weight = max(weights) if weights else 1.0
+        
+        # Width: logarithmic scale with max cap
+        widths = [min(np.log1p(w) * 1.5, 8.0) for w in weights]
+        
+        # Alpha: based on intensity (stronger = more opaque)
+        alphas = [min(0.3 + (w / max_weight) * 0.5, 0.8) for w in weights]
+        
+        # Edge colors: Reds colormap
+        edge_colors = weights
+        
+        # Draw nodes
+        nx.draw_networkx_nodes(G, pos, node_size=400, node_color='lightblue', 
+                               alpha=0.9, edgecolors='darkblue', linewidths=1.5)
+        
+        # Draw edges with varying width, color, and transparency
+        nx.draw_networkx_edges(G, pos, width=widths, alpha=0.7,
+                              edge_color=edge_colors, edge_cmap=plt.cm.Reds,
+                              arrows=True, arrowsize=10, 
+                              connectionstyle="arc3,rad=0.1")
+        
+        # Draw labels with background box for readability
+        labels = {node: node[:12] for node in G.nodes()}
+        nx.draw_networkx_labels(G, pos, labels, font_size=7, 
+                              font_weight='bold', font_color='black',
+                              bbox=dict(boxstyle='round,pad=0.2', facecolor='white', 
+                                       alpha=0.8, edgecolor='gray'))
+        
+        plt.title('ACO Pheromone Network Graph\n(Edge thickness/color = pheromone intensity | Main paths highlighted)', 
+                 fontsize=12, fontweight='bold')
+        plt.axis('off')
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    
     def _select_next_node(self, current_node):
         successors = self.graph.get_successors(current_node)
         if not successors:
@@ -161,8 +287,11 @@ class ACOOptimizer:
         best_pipeline = None
         best_score = -np.inf
         best_path = None
-        failed_count = 0  # Track failed pipeline evaluations
-
+        failed_count = 0
+        
+        # Reset Hall of Fame for each optimization run
+        self.top_k_pipelines = []
+        
         for i in range(self.iterations):
             ant_results = []
             
@@ -174,6 +303,9 @@ class ACOOptimizer:
                 if score == 0.0:
                     failed_count += 1
                 
+                # Update Hall of Fame
+                self.update_hall_of_fame(score, pipeline, path)
+                
                 if score > best_score:
                     best_score = score
                     best_path = path
@@ -184,7 +316,7 @@ class ACOOptimizer:
                 print(f"Iteration {i+1}: Best Score = {best_score:.4f}")
                 print(f"Best current Pipeline: {best_path}")
 
-        return best_pipeline, best_score
+        return best_pipeline, best_score, self.top_k_pipelines
     
     def _decode_path(self, path):
         """

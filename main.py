@@ -10,8 +10,14 @@ from sklearn.metrics import (
     confusion_matrix, 
     ConfusionMatrixDisplay,
     r2_score,
-    mean_squared_error
+    mean_squared_error,
+    mean_absolute_error,
+    precision_score,
+    recall_score,
+    f1_score,
+    accuracy_score
 )
+import os
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 from automl import *
@@ -212,8 +218,8 @@ def main(args):
     
     # Perform ML Pipeline Optimization with task-specific configuration
     dag = create_pipeline(num_cols, cat_cols, args, task_type=task_type, model_dict=model_dict)
-    optimizer = ACOOptimizer(dag, n_ants=args.n_ants, iterations=args.iterations)
-    best_pipeline, best_score = optimizer.optimize(X, y, verbose=True, task_type=task_type)
+    optimizer = ACOOptimizer(dag, n_ants=args.n_ants, iterations=args.iterations, top_k=args.top_k)
+    best_pipeline, best_score, top_k_pipelines = optimizer.optimize(X, y, verbose=True, task_type=task_type)
     print(best_pipeline)
     print(f"Best Score: {best_score:.4f}")
     
@@ -221,64 +227,180 @@ def main(args):
     # Results Export and Visualization
     # ========================================
     try:
-        joblib.dump(best_pipeline, experiment_path / "model.pkl")
-        
-        with open(experiment_path / "config.json", "w") as f:
+        # Save config
+        with open(os.path.join(experiment_path, "config.json"), "w") as f:
             json.dump(config, f, indent=4)
         
-        best_pipeline.fit(X, y)
-        y_pred = best_pipeline.predict(X)
+        # Save best model
+        joblib.dump(best_pipeline, os.path.join(experiment_path, "model.pkl"))
         
-        if task_type == 'classification':
-            plt.figure(figsize=(10, 7))
-            cm = confusion_matrix(y, y_pred)
-            disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-            disp.plot()
-            plt.title(f"Confusion Matrix - Best Score: {best_score:.4f}")
-            plt.savefig(experiment_path / "confusion_matrix.png", dpi=150, bbox_inches='tight')
-            plt.close()
-            
-            report = classification_report(y, y_pred)
-            with open(experiment_path / "metrics_report.txt", "w") as f:
-                f.write("=" * 50 + "\n")
-                f.write("CLASSIFICATION METRICS REPORT\n")
-                f.write("=" * 50 + "\n\n")
-                f.write(f"Best Score (Accuracy): {best_score:.4f}\n\n")
-                f.write("Classification Report:\n")
-                f.write("-" * 50 + "\n")
-                f.write(report)
-        else:
-            plt.figure(figsize=(10, 7))
-            plt.scatter(y, y_pred, alpha=0.5, edgecolors='k', linewidths=0.5)
-            
-            min_val = min(min(y), min(y_pred))
-            max_val = max(max(y), max(y_pred))
-            plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction')
-            
-            plt.xlabel("Actual Values")
-            plt.ylabel("Predicted Values")
-            plt.title(f"Predicted vs Actual - R2: {best_score:.4f}")
-            plt.legend()
-            plt.grid(True, alpha=0.3)
-            plt.savefig(experiment_path / "predicted_vs_actual.png", dpi=150, bbox_inches='tight')
-            plt.close()
-            
-            r2 = r2_score(y, y_pred)
-            rmse = np.sqrt(mean_squared_error(y, y_pred))
-            
-            with open(experiment_path / "metrics_report.txt", "w") as f:
-                f.write("=" * 50 + "\n")
-                f.write("REGRESSION METRICS REPORT\n")
-                f.write("=" * 50 + "\n\n")
-                f.write(f"Best Score (R2): {best_score:.4f}\n")
-                f.write(f"R2 Score: {r2:.4f}\n")
-                f.write(f"RMSE: {rmse:.4f}\n")
-            
+        # Single Model Evaluation
+        best_pipeline.fit(X, y)
+        y_pred_single = best_pipeline.predict(X)
+        single_metrics = evaluate_comprehensive(y, y_pred_single, task_type, best_score, experiment_path)
+        
+        # Pheromone Visualization
+        try:
+            optimizer.visualize_pheromones(os.path.join(experiment_path, 'pheromone_heatmap.png'))
+            optimizer.visualize_pheromone_network(os.path.join(experiment_path, 'pheromone_network.png'))
+        except Exception as e:
+            print(f"Visualization failed: {e}")
+        
+        # Ensemble Evaluation (if at least 2 unique pipelines)
+        ensemble_metrics = None
+        ensemble = None
+        if top_k_pipelines and len(top_k_pipelines) >= 2:
+            ensemble = create_ensemble(top_k_pipelines, task_type)
+            if ensemble:
+                try:
+                    ensemble.fit(X, y)
+                    y_pred_ensemble = ensemble.predict(X)
+                    ensemble_metrics = evaluate_comprehensive(y, y_pred_ensemble, task_type, best_score, experiment_path)
+                except Exception as e:
+                    print(f"Ensemble evaluation failed: {e}")
+                    ensemble_metrics = None
+                # Export protection: Try to save ensemble, but don't crash if it fails
+                try:
+                    joblib.dump(ensemble, os.path.join(experiment_path, "ensemble_model.pkl"))
+                except Exception as e:
+                    print(f"Ensemble export failed: {e}")
+        
+        # Unified Report
+        print_unified_report(single_metrics, ensemble_metrics, task_type)
+        
     except Exception as e:
         print(f"Export failed: {e}")
     
     print(f"\nResults exported to: experiments/{args.name}/")
+
+
+def create_ensemble(top_pipelines, task_type):
+    """Create VotingClassifier or VotingRegressor from top-K pipelines with probability-aware voting."""
+    if not top_pipelines or len(top_pipelines) < 2:
+        return None
     
+    try:
+        if task_type == 'classification':
+            from sklearn.ensemble import VotingClassifier
+            
+            # Check if ALL models support predict_proba for soft voting
+            all_support_proba = True
+            for _, pipe, _ in top_pipelines:
+                try:
+                    # Try to get the final estimator
+                    final_est = pipe[-1][1] if hasattr(pipe, '__getitem__') else None
+                    if final_est is not None and not hasattr(final_est, 'predict_proba'):
+                        all_support_proba = False
+                        break
+                except:
+                    all_support_proba = False
+                    break
+            
+            # Use soft voting only if ALL models support it
+            voting_mode = 'soft' if all_support_proba else 'hard'
+            
+            estimators = [(f"model_{i}", pipe) for i, (_, pipe, _) in enumerate(top_pipelines)]
+            ensemble = VotingClassifier(estimators=estimators, voting=voting_mode)
+        else:
+            from sklearn.ensemble import VotingRegressor
+            estimators = [(f"model_{i}", pipe) for i, (_, pipe, _) in enumerate(top_pipelines)]
+            ensemble = VotingRegressor(estimators=estimators)
+        
+        return ensemble
+        
+    except Exception as e:
+        print(f"Ensemble creation failed: {e}")
+        return None
+
+
+def evaluate_comprehensive(y_true, y_pred, task_type, best_score, save_path):
+    """Generate comprehensive evaluation metrics."""
+    if task_type == 'classification':
+        metrics = {
+            'accuracy': accuracy_score(y_true, y_pred),
+            'precision_macro': precision_score(y_true, y_pred, average='macro', zero_division=0),
+            'recall_macro': recall_score(y_true, y_pred, average='macro', zero_division=0),
+            'f1_macro': f1_score(y_true, y_pred, average='macro', zero_division=0),
+            'precision_weighted': precision_score(y_true, y_pred, average='weighted', zero_division=0),
+            'recall_weighted': recall_score(y_true, y_pred, average='weighted', zero_division=0),
+            'f1_weighted': f1_score(y_true, y_pred, average='weighted', zero_division=0),
+        }
+        
+        cm = confusion_matrix(y_true, y_pred)
+        plt.figure(figsize=(10, 8))
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+        disp.plot()
+        plt.title(f'Confusion Matrix (Accuracy: {metrics["accuracy"]:.4f})')
+        plt.savefig(os.path.join(save_path, 'confusion_matrix.png'), dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        return metrics
+    else:
+        r2 = r2_score(y_true, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+        mae = mean_absolute_error(y_true, y_pred)
+        mape = np.mean(np.abs((y_true - y_pred) / (y_true + 1e-10))) * 100
+        
+        metrics = {
+            'r2': r2,
+            'rmse': rmse,
+            'mae': mae,
+            'mape': mape,
+        }
+        
+        plt.figure(figsize=(10, 8))
+        plt.scatter(y_true, y_pred, alpha=0.5, edgecolors='k', linewidths=0.5)
+        min_val = min(np.min(y_true), np.min(y_pred))
+        max_val = max(np.max(y_true), np.max(y_pred))
+        plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect')
+        plt.xlabel('Actual Values')
+        plt.ylabel('Predicted Values')
+        plt.title(f'Predicted vs Actual (R2: {r2:.4f})')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(save_path, 'predicted_vs_actual.png'), dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        return metrics
+
+
+def print_unified_report(single_metrics, ensemble_metrics=None, task_type='classification'):
+    """Print unified metrics box with null-safety."""
+    
+    # Null-safe helper
+    def safe_val(metrics, key, default='N/A'):
+        if metrics is None or key not in metrics:
+            return default
+        val = metrics[key]
+        if val is None:
+            return default
+        try:
+            return f"{val:.4f}"
+        except:
+            return default
+    
+    print("\n" + "=" * 65)
+    print("               UNIFIED AUTOML EVALUATION REPORT")
+    print("=" * 65)
+    
+    if task_type == 'classification':
+        print(f"\n{'Metric':<28} {'Single Best':<15} {'Ensemble':<15}")
+        print("-" * 58)
+        print(f"{'Accuracy':<28} {safe_val(single_metrics, 'accuracy'):<15} {safe_val(ensemble_metrics, 'accuracy'):<15}")
+        print(f"{'Precision (Macro)':<28} {safe_val(single_metrics, 'precision_macro'):<15} {safe_val(ensemble_metrics, 'precision_macro'):<15}")
+        print(f"{'Recall (Macro)':<28} {safe_val(single_metrics, 'recall_macro'):<15} {safe_val(ensemble_metrics, 'recall_macro'):<15}")
+        print(f"{'F1-Score (Macro)':<28} {safe_val(single_metrics, 'f1_macro'):<15} {safe_val(ensemble_metrics, 'f1_macro'):<15}")
+        print(f"{'F1-Score (Weighted)':<28} {safe_val(single_metrics, 'f1_weighted'):<15} {safe_val(ensemble_metrics, 'f1_weighted'):<15}")
+    else:
+        print(f"\n{'Metric':<28} {'Single Best':<15} {'Ensemble':<15}")
+        print("-" * 58)
+        print(f"{'R2 Score':<28} {safe_val(single_metrics, 'r2'):<15} {safe_val(ensemble_metrics, 'r2'):<15}")
+        print(f"{'RMSE':<28} {safe_val(single_metrics, 'rmse'):<15} {safe_val(ensemble_metrics, 'rmse'):<15}")
+        print(f"{'MAE':<28} {safe_val(single_metrics, 'mae'):<15} {safe_val(ensemble_metrics, 'mae'):<15}")
+        print(f"{'MAPE (%)':<28} {safe_val(single_metrics, 'mape'):<15} {safe_val(ensemble_metrics, 'mape'):<15}")
+    
+    print("=" * 65)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AutoML for classification")
@@ -288,6 +410,7 @@ if __name__ == "__main__":
     parser.add_argument("--task", type=str, default="Auto", help="Task type [Auto, Classification, Regression]")
     parser.add_argument("--iterations", type=int, default=10, help="Number of ACO iterations")
     parser.add_argument("--n_ants", type=int, default=20, help="Number of ants per iteration")
+    parser.add_argument("--top_k", type=int, default=3, help="Number of top pipelines for ensemble")
     parser.add_argument("--dropna", type=bool, default=False, help="Drop NaN values")
     parser.add_argument("--num_fill_strategy", type=str, default="mean", help="Numerical fill strategy [mean, median, most_frequent]")
     parser.add_argument("--cat_fill_strategy", type=str, default="most_frequent", help="Categorical fill strategy [most_frequent, constant]")
