@@ -1,0 +1,42 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_none',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer())]),
+                                                  ['radius_mean',
+                                                   'texture_mean',
+                                                   'perimeter_mean',
+                                                   'area_mean',
+                                                   'smoothness_mean',
+                                                   'compactness_mean',
+                                                   'concavity_mean',
+                                                   'concave points_mean',
+                                                   'symmetry_mean',
+                                                   'fractal_dimension_mean',
+                                                   'radius_se', 'texture_se',
+                                                   'perimeter_se', 'are...
+                                                   'radius_worst',
+                                                   'texture_worst',
+                                                   'perimeter_worst',
+                                                   'area_worst',
+                                                   'smoothness_worst',
+                                                   'compactness_worst',
+                                                   'concavity_worst',
+                                                   'concave points_worst',
+                                                   'symmetry_worst',
+                                                   'fractal_dimension_worst']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_ada', AdaBoostClassifier())])
+Best Score: 0.9786160684623374
+              precision    recall  f1-score   support
+
+           B       0.96      0.99      0.97        71
+           M       0.98      0.93      0.95        43
+
+    accuracy                           0.96       114
+   macro avg       0.97      0.96      0.96       114
+weighted avg       0.97      0.96      0.96       114

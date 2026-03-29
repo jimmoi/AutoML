@@ -95,13 +95,17 @@ class ACOOptimizer:
 
     def optimize(self, X, y, scoring='accuracy', verbose=False):
         best_pipeline = None
+        best_path = None
         best_score = -np.inf
 
         for i in range(self.iterations):
+            print(f"Iteration {i+1}/{self.iterations}")
             ant_results = []
             
             for _ in range(self.n_ants):
                 path = self._construct_path()
+                if verbose:
+                    print(f" Path: {path}")
                 score, pipeline = self._evaluate_path(path, X, y, scoring)
                 ant_results.append((path, score))
                 
@@ -112,8 +116,10 @@ class ACOOptimizer:
 
             self._update_pheromones(ant_results)
             if verbose:
-                print(f"Iteration {i+1}: Best Score = {best_score:.4f}")
+                print(f"Best Score = {best_score:.4f}")
                 print(f"Best current Pipeline: {best_path}")
+                print(2**best_score)
+                print("="*50)
 
         return best_pipeline, best_score
     
@@ -185,7 +191,6 @@ class ACOOptimizer:
         
         try:
             clf = Pipeline(steps)
-            print(path)
             scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
             
             ## for continuous node update archive
@@ -196,9 +201,10 @@ class ACOOptimizer:
             return scores.mean() ,clf
         except Exception as e:
             print(steps)
+            print(clf)
             print("Invalid path", e)
-            # raise e
-            return 0 ,None # Return poor score for invalid paths
+            raise e
+            # return 0 ,None # Return poor score for invalid paths
 
     def _update_pheromones(self, results):
         # Evaporation
@@ -210,6 +216,8 @@ class ACOOptimizer:
             for i in range(len(path) - 1):
                 edge = (path[i], path[i+1])
                 if edge in self.graph.pheromones:
+                    if score < 0:
+                        score = 2**score
                     self.graph.pheromones[edge] += score
 
 if __name__ == "__main__":

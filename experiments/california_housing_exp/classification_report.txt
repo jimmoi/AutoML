@@ -1,0 +1,19 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_robust',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   RobustScaler())]),
+                                                  ['MedInc', 'HouseAge',
+                                                   'AveRooms', 'AveBedrms',
+                                                   'Population', 'AveOccup',
+                                                   'Latitude', 'Longitude']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_gbm', GradientBoostingRegressor())])
+Best Score: -0.2851358671268847
+Mean Squared Error: 0.29402104769568865

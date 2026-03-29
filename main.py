@@ -2,17 +2,21 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import argparse
-from data_processing import *
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+import joblib
+import json
 from automl import *
 from search_space import *
+from data_processing import *
 # from visualization import *
 
 import warnings
 warnings.filterwarnings("ignore")
 
-def create_pipeline(num_cols, cat_cols, args):
+def create_pipeline(num_cols, cat_cols, args, limit_n_feature=10):
     #----------------
     # 1. Setup Graph
     #----------------
@@ -46,7 +50,7 @@ def create_pipeline(num_cols, cat_cols, args):
         test = np.arange(1,n_choice+1)
         test[1:] = func2(test)[:-1]
         return set(test.tolist())
-    TOP_K = top_k_generate(feature_amount, 10)
+    TOP_K = top_k_generate(feature_amount, limit_n_feature)
     for k in TOP_K:
         dag.add_node(f"top_k_{k}", DiscreteNode(f"top_k_{k}", k))
     
@@ -55,8 +59,9 @@ def create_pipeline(num_cols, cat_cols, args):
         dag.add_node(feature_preprocessor, DiscreteNode(f"sk_feature_preprocessor_{feature_preprocessor}", FEATURE_PREPROCESSORS[feature_preprocessor]))
     
     # model nodes
-    for model in MODELS_CLASSIFIERS:
-        dag.add_node(model, DiscreteNode(f"sk_model_{model}", MODELS_CLASSIFIERS[model]))
+    MODELS = MODELS_CLASSIFIERS if args.task == "classification" else MODELS_REGRESSION
+    for model in MODELS:
+        dag.add_node(model, DiscreteNode(f"sk_model_{model}", MODELS[model]))
 
     #------------------------------
     # 4. Define valid paths (Edges)
@@ -78,11 +83,11 @@ def create_pipeline(num_cols, cat_cols, args):
 
     # Layer 4: k-hyperparameter nodes to model nodes
     for k in TOP_K:
-        for model in MODELS_CLASSIFIERS.keys():
+        for model in MODELS.keys():
             dag.add_edge(f"top_k_{k}", model)
 
     # Layer 5: model nodes to end node
-    for model in MODELS_CLASSIFIERS.keys():
+    for model in MODELS.keys():
         dag.add_edge(model, 'end')
     
     return dag
@@ -96,6 +101,8 @@ def main(args):
     experiment_path = EXPERIMENT_DIR / args.name
     experiment_path.mkdir(exist_ok=True)
     config = {
+        "experiment_name": args.name,
+        "dataset": args.data,
         "target": args.target,
         "task": args.task,
         "dropna": args.dropna,
@@ -110,38 +117,58 @@ def main(args):
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found at {data_path}")
     data = pd.read_csv(data_path)
-    data.drop(columns=["id"], inplace=True)
     
     if args.dropna:
         data.dropna(inplace=True)
         
     X, y = handle_target_column(data, args.target)
+    if args.task == "Classification":
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     num_cols = X.select_dtypes(include=np.number).columns.tolist()
     cat_cols = X.select_dtypes(exclude=np.number).columns.tolist()
     
     # Perform ML Pipeline Optimization
-    dag = create_pipeline(num_cols, cat_cols, args)
-    optimizer = ACOOptimizer(dag, n_ants=50, iterations=50)
-    best_pipeline, best_score = optimizer.optimize(X, y, verbose=True, scoring="f1_macro")
+    match args.task:
+        case "classification":
+            objective = "f1_macro"
+        case "regression":
+            objective = "neg_mean_squared_error"
+    config["objective"] = objective
+    dag = create_pipeline(num_cols, cat_cols, args, limit_n_feature=5)
+    optimizer = ACOOptimizer(dag, n_ants=30, iterations=25)
+    best_pipeline, best_score = optimizer.optimize(X_train, y_train, verbose=True, scoring=objective)
     print(f"Best Pipeline: {best_pipeline}")
     print(f"Best Score: {best_score}")
+    best_pipeline.fit(X_train, y_train)
+    y_pred = best_pipeline.predict(X_test)
     
-    # # save model
-    # joblib.dump(model, experiment_path / "model.pkl")
+    # save model
+    joblib.dump(best_pipeline, experiment_path / "model.pkl")
     
-    # # Visualize Results
-    # plt.figure(figsize=(10, 7))
-    # cm = confusion_matrix(y_test, y_pred)
-    # disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=model.classes_)
-    # disp.plot()
-    # plt.savefig(experiment_path / "confusion_matrix.png")
+    # Classification Visualize Results
+    if args.task == "classification":
+        plt.figure(figsize=(10, 7))
+        cm = confusion_matrix(y_test, y_pred)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=best_pipeline.classes_)
+        disp.plot()
+        plt.savefig(experiment_path / "confusion_matrix.png")
     
-    # # Save Results
-    # print(classification_report(y_test, y_pred), file=open(experiment_path / "classification_report.txt", "w"))
+    # Save Results
+    text = f"Best Pipeline: {best_pipeline}\n"
+    text += f"Best Score: {best_score}\n"
+    match args.task:
+        case "classification":
+            text += classification_report(y_test, y_pred)
+        case "regression":
+            text += f"Mean Squared Error: {mean_squared_error(y_test, y_pred)}\n"
+    with open(experiment_path / "classification_report.txt", "w") as f:
+        f.write(text)
     
-    # # save config
-    # with open(experiment_path / "config.json", "w") as f:
-    #     json.dump(config, f, indent=4)
+    # save config
+    with open(experiment_path / "config.json", "w") as f:
+        json.dump(config, f, indent=4)
     
 
 if __name__ == "__main__":
@@ -149,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", type=str, required=True, help="Name of the experiment")
     parser.add_argument("--data", type=str, required=True, help="Path to the dataset")
     parser.add_argument("--target", type=str, default="target", help="Target column name or index")
-    parser.add_argument("--task", type=str, default="Auto", help="Task type [Auto, Classification, Regression]")
+    parser.add_argument("--task", type=str, required=True, help="Task type [Classification, Regression]")
     parser.add_argument("--dropna", type=bool, default=False, help="Drop NaN values")
     parser.add_argument("--num_fill_strategy", type=str, default="mean", help="Numerical fill strategy [mean, median, most_frequent]")
     parser.add_argument("--cat_fill_strategy", type=str, default="most_frequent", help="Categorical fill strategy [most_frequent, constant]")

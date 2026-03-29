@@ -17,12 +17,23 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.feature_selection import f_classif
 
+from sklearn.linear_model import LinearRegression
+from sklearn.svm import SVR
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import AdaBoostRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+from xgboost import XGBRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.linear_model import Ridge, Lasso, ElasticNet
+
 SCALERS = {
-    "none": None, 
-    "standard": StandardScaler, 
-    "minmax": MinMaxScaler, 
-    "robust": RobustScaler, 
-    "normalizer": Normalizer
+    "scaler_none": None, 
+    "scaler_standard": StandardScaler, 
+    "scaler_minmax": MinMaxScaler, 
+    "scaler_robust": RobustScaler, 
+    "scaler_normalizer": Normalizer
 }
 
 def prepare_feature_preprocessor(feature_preprocessor):
@@ -46,33 +57,44 @@ def prepare_feature_preprocessor(feature_preprocessor):
     return wrapper
 
 FEATURE_PREPROCESSORS = {
-    "none": None, 
-    "pca": prepare_feature_preprocessor("pca"), 
-    "selectkbest": prepare_feature_preprocessor("selectkbest"), 
-    # "variancethreshold": prepare_feature_preprocessor("variancethreshold"), # !Error
-    # "lda": prepare_feature_preprocessor("lda") # !Error
+    "feature_preprocessor_none": None, 
+    "feature_preprocessor_pca": prepare_feature_preprocessor("pca"), 
+    "feature_preprocessor_selectkbest": prepare_feature_preprocessor("selectkbest"), 
+    # "feature_preprocessor_variancethreshold": prepare_feature_preprocessor("variancethreshold"), # !Error
+    # "feature_preprocessor_lda": prepare_feature_preprocessor("lda") # !Error
 }
 
 IMBALANCED_TECHNIQUES = {
-    "none": None, 
-    # "smote": SMOTE
+    "imbalanced_none": None, 
+    # "imbalanced_smote": SMOTE
 }
 
 MODELS_CLASSIFIERS = {
-    "logistic": LogisticRegression,
-    'rf': RandomForestClassifier,
-    'svc': SVC,
-    'knn': KNeighborsClassifier,
-    'nb': GaussianNB,
-    'dt': DecisionTreeClassifier,
-    'ada': AdaBoostClassifier,
-    'gbm': GradientBoostingClassifier,
-    # 'xgb': XGBClassifier, # !Error y encoder
-    'mlp': MLPClassifier,
-    'lda': LinearDiscriminantAnalysis,
-    # 'qda': QuadraticDiscriminantAnalysis,  # !Error highly collinear (redundant)
+    "model_logistic": LogisticRegression,
+    "model_rf": RandomForestClassifier,
+    "model_svc": SVC,
+    "model_knn": KNeighborsClassifier,
+    "model_nb": GaussianNB,
+    "model_dt": DecisionTreeClassifier,
+    "model_ada": AdaBoostClassifier,
+    "model_gbm": GradientBoostingClassifier,
+    # "model_xgb": XGBClassifier, # !Error y encoder
+    "model_mlp": MLPClassifier,
+    "model_lda": LinearDiscriminantAnalysis,
+    # "model_qda": QuadraticDiscriminantAnalysis,  # !Error highly collinear (redundant)
 }
-# models_regression = {
-#     'rf': {'name': 'RandomForestRegressor', 'component': RandomForestRegressor},
-#     'svc': {'name': 'SVR', 'component': SVR}
-# }
+
+MODELS_REGRESSION = {
+    "model_rf": RandomForestRegressor,
+    "model_svc": SVR,
+    "model_knn": KNeighborsRegressor,
+    "model_dt": DecisionTreeRegressor,
+    "model_ada": AdaBoostRegressor,
+    "model_gbm": GradientBoostingRegressor,
+    # "model_xgb": XGBRegressor, # !Error y encoder
+    "model_mlp": MLPRegressor,
+    "model_linear": LinearRegression,
+    "model_ridge": Ridge,
+    "model_lasso": Lasso,
+    "model_elasticnet": ElasticNet
+}

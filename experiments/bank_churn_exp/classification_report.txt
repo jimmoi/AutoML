@@ -1,0 +1,26 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_none',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer())]),
+                                                  ['CreditScore', 'Age',
+                                                   'Tenure', 'Balance',
+                                                   'NumOfProducts', 'HasCrCard',
+                                                   'IsActiveMember',
+                                                   'EstimatedSalary']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  ['Surname', 'Geography',
+                                                   'Gender'])])),
+                ('sk_model_model_gbm', GradientBoostingClassifier())])
+Best Score: 0.7414270755935167
+              precision    recall  f1-score   support
+
+           0       0.88      0.96      0.92      1607
+           1       0.74      0.46      0.56       393
+
+    accuracy                           0.86      2000
+   macro avg       0.81      0.71      0.74      2000
+weighted avg       0.85      0.86      0.85      2000
