@@ -72,7 +72,7 @@ def visualize_pheromone(dag, pheromone_history, video_path, image_path):
     
     def update(frame):
         ax.clear()
-        ax.set_title(f"Pheromone Levels - Iteration {frame + 1}")
+        ax.set_title(f"Pheromone Levels - Iteration {frame}")
         
         current_pheromones = pheromone_history[frame]
         

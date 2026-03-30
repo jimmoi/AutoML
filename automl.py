@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import random
 import copy
+import time
 from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline
 
@@ -98,13 +99,17 @@ class ACOOptimizer:
         self.timeout = timeout
 
     def optimize(self, X, y, scoring='accuracy', verbose=False):
+        start_time = time.time()
         best_pipeline = None
         best_path = None
+        best_params = None
         best_score = -np.inf
         
         score_history = []
         pheromone_history = []
 
+        pheromone_history.append(copy.deepcopy(self.graph.pheromones))
+        
         for i in range(self.iterations):
             print(f"Iteration {i+1}/{self.iterations}")
             ant_results = []
@@ -120,6 +125,7 @@ class ACOOptimizer:
                     best_score = score
                     best_path = path
                     best_pipeline = pipeline
+                    best_params = params
 
             self._update_pheromones(ant_results)
             score_history.append(best_score)
@@ -130,7 +136,8 @@ class ACOOptimizer:
                 print(f"Best current Pipeline: {best_path}")
                 print("="*50)
 
-        return best_pipeline, best_score, best_params, score_history, pheromone_history
+        optimization_time = time.time() - start_time
+        return best_pipeline, best_score, best_params, score_history, pheromone_history, optimization_time
     
     def _decode_path(self, path):
         steps = []

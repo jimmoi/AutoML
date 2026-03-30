@@ -153,10 +153,11 @@ def main(args):
     config["objective"] = objective
     dag = create_pipeline(num_cols, cat_cols, args, limit_n_feature=5,)
     optimizer = ACOOptimizer(dag, n_ants=30, iterations=25, local_search_iters=5, timeout=100)
-    best_pipeline, best_score, best_params, score_history, pheromone_history = optimizer.optimize(X_train, y_train, verbose=True, scoring=objective)
+    best_pipeline, best_score, best_params, score_history, pheromone_history, optimization_time = optimizer.optimize(X_train, y_train, verbose=True, scoring=objective)
     print(f"Best Pipeline: {best_pipeline}")
     print(f"Best Score: {best_score}")
     print(f"Best Params: {best_params}")
+    print(f"Optimization Time: {optimization_time:.2f} seconds")
     best_pipeline.fit(X_train, y_train)
     y_pred = best_pipeline.predict(X_test)
     
@@ -181,6 +182,7 @@ def main(args):
     # Save Results
     text = f"Best Pipeline: {best_pipeline}\n"
     text += f"Best Params: {best_params}\n" if best_params else ""
+    text += f"Optimization Time: {optimization_time:.2f} seconds\n"
     text += f"Best Score: {best_score}\n"
     match args.task:
         case "classification":
@@ -191,7 +193,7 @@ def main(args):
             text += f"Mean Absolute Error: {mean_absolute_error(y_test, y_pred)}\n"
             text += f"Mean Absolute Percentage Error: {mean_absolute_percentage_error(y_test, y_pred)}\n"
 
-    with open(experiment_path / "classification_report.txt", "w") as f:
+    with open(experiment_path / "report.txt", "w") as f:
         f.write(text)
     
     # save config

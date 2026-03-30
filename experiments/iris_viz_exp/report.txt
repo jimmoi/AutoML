@@ -14,15 +14,19 @@ Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_normalizer',
                                                                   ('onehot',
                                                                    OneHotEncoder(handle_unknown='ignore'))]),
                                                   [])])),
-                ('sk_model_model_knn',
-                 KNeighborsClassifier(n_neighbors=3, weights='distance'))])
+                ('sk_feature_preprocessor_feature_preprocessor_pca',
+                 PCA(n_components=2)),
+                ('sk_model_model_ada',
+                 AdaBoostClassifier(learning_rate=0.01, n_estimators=200))])
+Best Params: {'sk_model_model_ada__n_estimators': 200, 'sk_model_model_ada__learning_rate': 0.01}
+Optimization Time: 441.15 seconds
 Best Score: 0.9830687830687831
               precision    recall  f1-score   support
 
       setosa       1.00      1.00      1.00        10
-  versicolor       0.90      1.00      0.95         9
-   virginica       1.00      0.91      0.95        11
+  versicolor       1.00      0.89      0.94         9
+   virginica       0.92      1.00      0.96        11
 
     accuracy                           0.97        30
-   macro avg       0.97      0.97      0.97        30
+   macro avg       0.97      0.96      0.97        30
 weighted avg       0.97      0.97      0.97        30
