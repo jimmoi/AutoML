@@ -1,0 +1,28 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_normalizer',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   Normalizer())]),
+                                                  ['sepal length (cm)',
+                                                   'sepal width (cm)',
+                                                   'petal length (cm)',
+                                                   'petal width (cm)']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_knn',
+                 KNeighborsClassifier(n_neighbors=3, weights='distance'))])
+Best Score: 0.9830687830687831
+              precision    recall  f1-score   support
+
+      setosa       1.00      1.00      1.00        10
+  versicolor       0.90      1.00      0.95         9
+   virginica       1.00      0.91      0.95        11
+
+    accuracy                           0.97        30
+   macro avg       0.97      0.97      0.97        30
+weighted avg       0.97      0.97      0.97        30

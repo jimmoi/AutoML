@@ -100,6 +100,9 @@ class ACOOptimizer:
         best_pipeline = None
         best_path = None
         best_score = -np.inf
+        
+        score_history = []
+        pheromone_history = []
 
         for i in range(self.iterations):
             print(f"Iteration {i+1}/{self.iterations}")
@@ -118,12 +121,15 @@ class ACOOptimizer:
                     best_pipeline = pipeline
 
             self._update_pheromones(ant_results)
+            score_history.append(best_score)
+            pheromone_history.append(copy.deepcopy(self.graph.pheromones))
+            
             if verbose:
                 print(f"Best Score = {best_score:.4f}")
                 print(f"Best current Pipeline: {best_path}")
                 print("="*50)
 
-        return best_pipeline, best_score
+        return best_pipeline, best_score, score_history, pheromone_history
     
     def _decode_path(self, path):
         steps = []

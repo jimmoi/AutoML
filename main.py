@@ -12,7 +12,7 @@ import json
 from automl import *
 from search_space import *
 from data_processing import *
-# from visualization import *
+from visualization import *
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -151,9 +151,9 @@ def main(args):
         case "regression":
             objective = "neg_mean_squared_error"
     config["objective"] = objective
-    dag = create_pipeline(num_cols, cat_cols, args, limit_n_feature=5)
-    optimizer = ACOOptimizer(dag, n_ants=30, iterations=25, local_search_iters=10)
-    best_pipeline, best_score = optimizer.optimize(X_train, y_train, verbose=True, scoring=objective)
+    dag = create_pipeline(num_cols, cat_cols, args, limit_n_feature=5,)
+    optimizer = ACOOptimizer(dag, n_ants=30, iterations=25, local_search_iters=5)
+    best_pipeline, best_score, score_history, pheromone_history = optimizer.optimize(X_train, y_train, verbose=True, scoring=objective)
     print(f"Best Pipeline: {best_pipeline}")
     print(f"Best Score: {best_score}")
     best_pipeline.fit(X_train, y_train)
@@ -162,8 +162,12 @@ def main(args):
     # save model
     joblib.dump(best_pipeline, experiment_path / "model.pkl")
     
-    with open(experiment_path / "graph.pkl", "wb") as f:
-        pickle.dump(dag, f)
+    # with open(experiment_path / "graph.pkl", "wb") as f:
+    #     pickle.dump(dag, f)
+        
+    # Visualize optimization
+    plot_objective_value(score_history, experiment_path / "objective_value.png")
+    visualize_pheromone(dag, pheromone_history, experiment_path / "optimization_behavior.mp4", experiment_path / "final_graph.png")
     
     # Classification Visualize Results
     if args.task == "classification":
