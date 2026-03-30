@@ -1,0 +1,42 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_robust',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   RobustScaler())]),
+                                                  ['id', 'radius_mean',
+                                                   'texture_mean',
+                                                   'perimeter_mean',
+                                                   'area_mean',
+                                                   'smoothness_mean',
+                                                   'compactness_mean',
+                                                   'concavity_mean',
+                                                   'concave points_mean',
+                                                   'symmetry_mean',
+                                                   'fractal_dimension_mean',
+                                                   'radius_se',...
+                                                   'texture_worst',
+                                                   'perimeter_worst',
+                                                   'area_worst',
+                                                   'smoothness_worst',
+                                                   'compactness_worst',
+                                                   'concavity_worst',
+                                                   'concave points_worst',
+                                                   'symmetry_worst', ...]),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_logistic',
+                 LogisticRegression(penalty='l2', solver='liblinear'))])
+Best Score: 0.9739850429877037
+              precision    recall  f1-score   support
+
+           B       0.99      1.00      0.99        71
+           M       1.00      0.98      0.99        43
+
+    accuracy                           0.99       114
+   macro avg       0.99      0.99      0.99       114
+weighted avg       0.99      0.99      0.99       114

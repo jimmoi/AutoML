@@ -1,0 +1,33 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_standard',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   StandardScaler())]),
+                                                  ['age', 'fnlwgt',
+                                                   'education.num',
+                                                   'capital.gain',
+                                                   'capital.loss',
+                                                   'hours.per.week']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  ['workclass', 'education',
+                                                   'marital.status',
+                                                   'occupation', 'relationship',
+                                                   'race', 'sex',
+                                                   'native.country'])])),
+                ('sk_model_model_gbm',
+                 GradientBoostingClassifier(max_depth=7, n_estimators=200,
+                                            subsample=0.8))])
+Best Score: 0.8135260856065158
+              precision    recall  f1-score   support
+
+       <=50K       0.89      0.94      0.92      4976
+        >50K       0.77      0.63      0.69      1537
+
+    accuracy                           0.87      6513
+   macro avg       0.83      0.79      0.81      6513
+weighted avg       0.86      0.87      0.86      6513
