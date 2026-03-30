@@ -216,10 +216,12 @@ class ACOOptimizer:
             def _eval_func():
                 if param_space and self.local_search_iters > 0:
                     score, pipeline, params = self._trajectory_local_search(clf, param_space, X, y, scoring)
+                    score = score if not np.isnan(score) else 0
                     return score, pipeline, params
                 else:
                     scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
-                    return scores.mean() ,clf, None
+                    score = scores.mean() if not np.isnan(scores.mean()) else 0
+                    return score ,clf, None
 
             if self.timeout is not None and self.timeout > 0:
                 import concurrent.futures
@@ -232,14 +234,14 @@ class ACOOptimizer:
                 except concurrent.futures.TimeoutError:
                     print(f"Path evaluation timed out after {self.timeout}s: {steps}")
                     executor.shutdown(wait=False, cancel_futures=True)
-                    return 0.0, None
+                    return 0.0, None, None
             else:
                 return _eval_func()
                 
         except Exception as e:
             print(steps)
             print("Invalid path", e)
-            return 0.0, None
+            return 0.0, None, None
 
     def _trajectory_local_search(self, pipeline, param_space, X, y, scoring, initial_temp=1.0, cooling_rate=0.8):
         # Generate initial random configuration
