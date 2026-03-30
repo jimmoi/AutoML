@@ -428,10 +428,10 @@ class ACOOptimizer:
                 steps.append(('preprocessor', preprocessor))
                 continue
             
-            # Handle smote nodes
-            if node_id == 'smote':
-                steps.append(('smote', SMOTE()))
-                continue
+            # # Handle smote nodes
+            # if node_id == 'smote':
+            #     steps.append(('smote', SMOTE()))
+            #     continue
         
         # Add model with collected params (if any)
         if pending_model_class is not None and pending_model_name is not None:
