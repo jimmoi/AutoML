@@ -155,6 +155,16 @@ def create_pipeline(num_cols, cat_cols, args, task_type='classification', model_
     
     return dag
 
+def clean_special_values(df):
+    return df.replace([
+        "?", "??", "???",
+        "NA", "N/A", "n/a",
+        "null", "NULL", "Null",
+        "none", "None",
+        "-", "--",
+        "",
+        " "
+    ], np.nan)
 
 
 EXPERIMENT_DIR = Path("experiments")
@@ -163,21 +173,13 @@ def main(args):
     # Create experiment directory
     experiment_path = EXPERIMENT_DIR / args.name
     experiment_path.mkdir(exist_ok=True)
-    config = {
-        "target": args.target,
-        "task": args.task,
-        "dropna": args.dropna,
-        "num_fill_strategy": args.num_fill_strategy,
-        "cat_fill_strategy": args.cat_fill_strategy,
-        "add_poly": args.add_poly,
-        "use_smote": args.use_smote
-    }
     
     # load data - FULL dataset
     data_path = Path(args.data)
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found at {data_path}")
     data_full = pd.read_csv(data_path, sep=None, engine='python')
+    data_full = clean_special_values(data_full)
     
     if args.dropna:
         data_full.dropna(inplace=True)
@@ -225,10 +227,17 @@ def main(args):
     num_cols = X_sample.select_dtypes(include=np.number).columns.tolist()
     cat_cols = X_sample.select_dtypes(exclude=np.number).columns.tolist()
     
+    print(f"Numeric columns: {num_cols}")
+    print(f"Categorical columns: {cat_cols}")
+    
+    print(f"Sample data shape: {X_sample.shape}, {y_sample.shape}")
+    print(X_sample.head())
+    print(y_sample[:5])
+    
     # Perform ML Pipeline Optimization on SAMPLED data (for speed)
     dag = create_pipeline(num_cols, cat_cols, args, task_type=task_type, model_dict=model_dict)
     optimizer = ACOOptimizer(dag, n_ants=args.n_ants, iterations=args.iterations, top_k=args.top_k)
-    best_pipeline, best_score, top_k_pipelines = optimizer.optimize(X_sample, y_sample, verbose=True, task_type=task_type)
+    best_pipeline, best_score, top_k_pipelines, best_path = optimizer.optimize(X_sample, y_sample, verbose=True, task_type=task_type)
     print(best_pipeline)
     print(f"Best Score (on sample): {best_score:.4f}")
     
@@ -252,6 +261,17 @@ def main(args):
     # ========================================
     # Results Export and Visualization
     # ========================================
+    config = {
+        "target": args.target,
+        "task": args.task,
+        "dropna": args.dropna,
+        "num_fill_strategy": args.num_fill_strategy,
+        "cat_fill_strategy": args.cat_fill_strategy,
+        "add_poly": args.add_poly,
+        "use_smote": args.use_smote,
+        "best_path": best_path
+    }
+    
     try:
         # Save config
         with open(os.path.join(experiment_path, "config.json"), "w") as f:
@@ -436,7 +456,7 @@ if __name__ == "__main__":
     parser.add_argument("--iterations", type=int, default=10, help="Number of ACO iterations")
     parser.add_argument("--n_ants", type=int, default=20, help="Number of ants per iteration")
     parser.add_argument("--top_k", type=int, default=3, help="Number of top pipelines for ensemble")
-    parser.add_argument("--dropna", type=bool, default=False, help="Drop NaN values")
+    parser.add_argument("--dropna", type=bool, default=True, help="Drop NaN values")
     parser.add_argument("--num_fill_strategy", type=str, default="mean", help="Numerical fill strategy [mean, median, most_frequent]")
     parser.add_argument("--cat_fill_strategy", type=str, default="most_frequent", help="Categorical fill strategy [most_frequent, constant]")
     parser.add_argument("--add_poly", type=bool, default=False, help="Add polynomial features")

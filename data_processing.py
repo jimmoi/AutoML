@@ -37,10 +37,26 @@ def tramsform_column(numerical_columns, categorical_columns, num_fill_strategy, 
     
     # Only add categorical pipeline if there are categorical columns
     if len(categorical_columns) > 0:
-        cat_steps = []
-        cat_steps.append(("impute", SimpleImputer(strategy=cat_fill_strategy)))
-        cat_steps.append(("onehot", OneHotEncoder(handle_unknown="ignore")))
-        cat_pipeline = Pipeline(cat_steps)
+        # print(f"Categorical columns detected: {categorical_columns}")
+        # กัน strategy พัง
+        if cat_fill_strategy not in ["most_frequent", "constant"]:
+            cat_fill_strategy = "most_frequent"
+
+        # กัน sklearn version
+        try:
+            encoder = OneHotEncoder(
+                handle_unknown="ignore",
+                max_categories=20,
+                min_frequency=5
+            )
+        except TypeError:
+            encoder = OneHotEncoder(handle_unknown="ignore")
+
+        cat_pipeline = Pipeline([
+            ("impute", SimpleImputer(strategy=cat_fill_strategy)),
+            ("onehot", encoder)
+        ])
+
         transformers.append(("cat", cat_pipeline, categorical_columns))
     
     # Combine pipelines dynamically

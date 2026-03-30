@@ -316,7 +316,7 @@ class ACOOptimizer:
                 print(f"Iteration {i+1}: Best Score = {best_score:.4f}")
                 print(f"Best current Pipeline: {best_path}")
 
-        return best_pipeline, best_score, self.top_k_pipelines
+        return best_pipeline, best_score, self.top_k_pipelines, best_path
     
     def _decode_path(self, path):
         """
@@ -425,8 +425,12 @@ class ACOOptimizer:
             # Handle preprocessor nodes - append directly
             if 'preprocessor_' in node_id:
                 preprocessor = node.value if hasattr(node, 'value') and node.value else node.value
-                if callable(preprocessor):
-                    steps.append((node.name, preprocessor))
+                steps.append(('preprocessor', preprocessor))
+                continue
+            
+            # Handle smote nodes
+            if node_id == 'smote':
+                steps.append(('smote', SMOTE()))
                 continue
         
         # Add model with collected params (if any)
@@ -512,6 +516,7 @@ class ACOOptimizer:
         
         self.cache_misses += 1
         steps = self._decode_path(path)
+        # print(steps)
         
         try:
             # Dynamically select scoring metric based on task type
@@ -543,6 +548,7 @@ class ACOOptimizer:
             
         except Exception as e:
             # Cache failed evaluations to prevent redundant retries
+            # print(f"Error evaluating path {path}: {e}")
             self.pipeline_cache[path_key] = (0.0, None)
             return 0.0, None
 
