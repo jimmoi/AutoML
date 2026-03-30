@@ -87,7 +87,7 @@ class PipelineGraph:
         return self.adj_list.get(node_id, [])
 
 class ACOOptimizer:
-    def __init__(self, graph, n_ants=10, iterations=20, alpha=1.0, beta=2.0, decay=0.1, local_search_iters=5):
+    def __init__(self, graph, n_ants=10, iterations=20, alpha=1.0, beta=2.0, decay=0.1, local_search_iters=5, timeout=300):
         self.graph = graph
         self.n_ants = n_ants
         self.iterations = iterations
@@ -95,6 +95,7 @@ class ACOOptimizer:
         self.beta = beta    # Heuristic importance (skipped here for simplicity)
         self.decay = decay
         self.local_search_iters = local_search_iters
+        self.timeout = timeout
 
     def optimize(self, X, y, scoring='accuracy', verbose=False):
         best_pipeline = None
@@ -112,7 +113,7 @@ class ACOOptimizer:
                 path = self._construct_path()
                 if verbose:
                     print(f" Path: {path}")
-                score, pipeline = self._evaluate_path(path, X, y, scoring)
+                score, pipeline, params = self._evaluate_path(path, X, y, scoring)
                 ant_results.append((path, score))
                 
                 if score > best_score:
@@ -129,7 +130,7 @@ class ACOOptimizer:
                 print(f"Best current Pipeline: {best_path}")
                 print("="*50)
 
-        return best_pipeline, best_score, score_history, pheromone_history
+        return best_pipeline, best_score, best_params, score_history, pheromone_history
     
     def _decode_path(self, path):
         steps = []
@@ -204,16 +205,34 @@ class ACOOptimizer:
         
         try:
             clf = Pipeline(steps)
-            if param_space and self.local_search_iters > 0:
-                best_score, best_pipeline = self._trajectory_local_search(clf, param_space, X, y, scoring)
-                return best_score, best_pipeline
+            
+            def _eval_func():
+                if param_space and self.local_search_iters > 0:
+                    score, pipeline, params = self._trajectory_local_search(clf, param_space, X, y, scoring)
+                    return score, pipeline, params
+                else:
+                    scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
+                    return scores.mean() ,clf, None
+
+            if self.timeout is not None and self.timeout > 0:
+                import concurrent.futures
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                future = executor.submit(_eval_func)
+                try:
+                    result = future.result(timeout=self.timeout)
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    return result
+                except concurrent.futures.TimeoutError:
+                    print(f"Path evaluation timed out after {self.timeout}s: {steps}")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    return 0.0, None
             else:
-                scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
-                return scores.mean() ,clf
+                return _eval_func()
+                
         except Exception as e:
             print(steps)
             print("Invalid path", e)
-            raise e
+            return 0.0, None
 
     def _trajectory_local_search(self, pipeline, param_space, X, y, scoring, initial_temp=1.0, cooling_rate=0.8):
         # Generate initial random configuration
@@ -263,7 +282,7 @@ class ACOOptimizer:
             
         # Return best pipeline configuration
         pipeline.set_params(**best_params)
-        return best_score, pipeline
+        return best_score, pipeline, best_params
 
     def _update_pheromones(self, results):
         # Evaporation

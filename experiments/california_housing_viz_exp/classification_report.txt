@@ -1,0 +1,22 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_standard',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   StandardScaler())]),
+                                                  ['MedInc', 'HouseAge',
+                                                   'AveRooms', 'AveBedrms',
+                                                   'Population', 'AveOccup',
+                                                   'Latitude', 'Longitude']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_rf', RandomForestRegressor())])
+Best Score: -0.2598668873758298
+Mean Squared Error: 0.2544736012588956
+R2 Score: 0.8058059693695763
+Mean Absolute Error: 0.3276652049660854
+Mean Absolute Percentage Error: 0.18881943385043315
