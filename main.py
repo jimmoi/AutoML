@@ -5,8 +5,9 @@ import argparse
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, mean_absolute_percentage_error
 import joblib
+import pickle
 import json
 from automl import *
 from search_space import *
@@ -58,6 +59,11 @@ def create_pipeline(num_cols, cat_cols, args, limit_n_feature=10):
     for feature_preprocessor in FEATURE_PREPROCESSORS:
         dag.add_node(feature_preprocessor, DiscreteNode(f"sk_feature_preprocessor_{feature_preprocessor}", FEATURE_PREPROCESSORS[feature_preprocessor]))
     
+    # imbalanced technique nodes
+    if args.use_smote:
+        for imbalanced_technique in IMBALANCED_TECHNIQUES:
+            dag.add_node(imbalanced_technique, DiscreteNode(f"sk_imbalanced_technique_{imbalanced_technique}", IMBALANCED_TECHNIQUES[imbalanced_technique]))
+    
     # model nodes
     MODELS = MODELS_CLASSIFIERS if args.task == "classification" else MODELS_REGRESSION
     for model in MODELS:
@@ -83,8 +89,17 @@ def create_pipeline(num_cols, cat_cols, args, limit_n_feature=10):
 
     # Layer 4: k-hyperparameter nodes to model nodes
     for k in TOP_K:
-        for model in MODELS.keys():
-            dag.add_edge(f"top_k_{k}", model)
+        if args.use_smote:
+            for imbalanced_technique in IMBALANCED_TECHNIQUES:
+                dag.add_edge(f"top_k_{k}", imbalanced_technique)
+            
+            for imbalanced_technique in IMBALANCED_TECHNIQUES:
+                for model in MODELS.keys():
+                    dag.add_edge(imbalanced_technique, model)
+        else:
+            for model in MODELS.keys():
+                dag.add_edge(f"top_k_{k}", model)
+            
 
     # Layer 5: model nodes to end node
     for model in MODELS.keys():
@@ -147,6 +162,9 @@ def main(args):
     # save model
     joblib.dump(best_pipeline, experiment_path / "model.pkl")
     
+    with open(experiment_path / "graph.pkl", "wb") as f:
+        pickle.dump(dag, f)
+    
     # Classification Visualize Results
     if args.task == "classification":
         plt.figure(figsize=(10, 7))
@@ -163,6 +181,10 @@ def main(args):
             text += classification_report(y_test, y_pred)
         case "regression":
             text += f"Mean Squared Error: {mean_squared_error(y_test, y_pred)}\n"
+            text += f"R2 Score: {r2_score(y_test, y_pred)}\n"
+            text += f"Mean Absolute Error: {mean_absolute_error(y_test, y_pred)}\n"
+            text += f"Mean Absolute Percentage Error: {mean_absolute_percentage_error(y_test, y_pred)}\n"
+
     with open(experiment_path / "classification_report.txt", "w") as f:
         f.write(text)
     

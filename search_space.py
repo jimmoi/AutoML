@@ -66,7 +66,7 @@ FEATURE_PREPROCESSORS = {
 
 IMBALANCED_TECHNIQUES = {
     "imbalanced_none": None, 
-    # "imbalanced_smote": SMOTE
+    "imbalanced_smote": SMOTE
 }
 
 MODELS_CLASSIFIERS = {
