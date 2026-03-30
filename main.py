@@ -149,7 +149,7 @@ def main(args):
         case "classification":
             objective = "f1_macro"
         case "regression":
-            objective = "neg_mean_squared_error"
+            objective = "r2"
     config["objective"] = objective
     dag = create_pipeline(num_cols, cat_cols, args, limit_n_feature=5,)
     optimizer = ACOOptimizer(dag, n_ants=30, iterations=25, local_search_iters=5, timeout=100)

@@ -116,9 +116,9 @@ class ACOOptimizer:
             
             for _ in range(self.n_ants):
                 path = self._construct_path()
-                if verbose:
-                    print(f" Path: {path}")
                 score, pipeline, params = self._evaluate_path(path, X, y, scoring)
+                if verbose:
+                    print(f"Score: {score:.4f}, Path: {path}")
                 ant_results.append((path, score))
                 
                 if score > best_score:
