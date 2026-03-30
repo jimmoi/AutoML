@@ -1,0 +1,34 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_robust',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   RobustScaler())]),
+                                                  ['age', 'fnlwgt',
+                                                   'education.num',
+                                                   'capital.gain',
+                                                   'capital.loss',
+                                                   'hours.per.week']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  ['workclass', 'education',
+                                                   'marital.status',
+                                                   'occupation', 'relationship',
+                                                   'race', 'sex',
+                                                   'native.country'])])),
+                ('sk_model_model_gbm',
+                 GradientBoostingClassifier(n_estimators=300))])
+Best Params: {'sk_model_model_gbm__n_estimators': 300, 'sk_model_model_gbm__learning_rate': 0.1, 'sk_model_model_gbm__max_depth': 3, 'sk_model_model_gbm__subsample': 1.0}
+Optimization Time: 3487.02 seconds
+Best Score: 0.8108481824611727
+              precision    recall  f1-score   support
+
+       <=50K       0.89      0.95      0.92      4976
+        >50K       0.79      0.62      0.70      1537
+
+    accuracy                           0.87      6513
+   macro avg       0.84      0.79      0.81      6513
+weighted avg       0.87      0.87      0.87      6513
