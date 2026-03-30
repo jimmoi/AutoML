@@ -216,10 +216,12 @@ class ACOOptimizer:
             def _eval_func():
                 if param_space and self.local_search_iters > 0:
                     score, pipeline, params = self._trajectory_local_search(clf, param_space, X, y, scoring)
+                    score = score if not np.isnan(score) else 0
                     return score, pipeline, params
                 else:
                     scores = cross_val_score(clf, X, y, cv=5, scoring=scoring, n_jobs=-1)
-                    return scores.mean() ,clf, None
+                    score = scores.mean() if not np.isnan(scores.mean()) else 0
+                    return score ,clf, None
 
             if self.timeout is not None and self.timeout > 0:
                 import concurrent.futures

@@ -1,0 +1,23 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_minmax',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   MinMaxScaler())]),
+                                                  ['age', 'sex', 'bmi', 'bp',
+                                                   's1', 's2', 's3', 's4', 's5',
+                                                   's6']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_ridge', Ridge())])
+Best Params: {'sk_model_model_ridge__alpha': 1.0, 'sk_model_model_ridge__solver': 'auto'}
+Optimization Time: 354.80 seconds
+Best Score: 0.456445318663311
+Mean Squared Error: 2865.1816347822473
+R2 Score: 0.45921110402614407
+Mean Absolute Error: 42.908127240528955
+Mean Absolute Percentage Error: 0.37522010053066374
