@@ -244,6 +244,7 @@ def main(args):
     # ========================================
     # FULL TRAINING PHASE - Train on complete dataset
     # ========================================
+    print("\n--- Optimization complete on sample data. Now training best models on full dataset... ---\n")
     
     # Re-train best pipeline on FULL data
     best_pipeline.fit(X_full, y_full)
@@ -298,7 +299,8 @@ def main(args):
             ensemble = create_ensemble(top_k_pipelines_full, task_type)
             if ensemble:
                 try:
-                    # Ensemble is already fitted on full data above via create_ensemble
+                    # CRITICAL: Must fit the ensemble before predicting
+                    ensemble.fit(X_full, y_full)
                     y_pred_ensemble = ensemble.predict(X_full)
                     ensemble_metrics = evaluate_comprehensive(y_full, y_pred_ensemble, task_type, best_score, experiment_path)
                 except Exception as e:
