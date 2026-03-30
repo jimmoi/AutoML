@@ -1,0 +1,32 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_robust',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   RobustScaler())]),
+                                                  ['Id', 'Cl.thickness',
+                                                   'Cell.size', 'Cell.shape',
+                                                   'Marg.adhesion',
+                                                   'Epith.c.size',
+                                                   'Bare.nuclei', 'Bl.cromatin',
+                                                   'Normal.nucleoli',
+                                                   'Mitoses']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_rf',
+                 RandomForestClassifier(max_depth=10, min_samples_leaf=2,
+                                        min_samples_split=5,
+                                        n_estimators=300))])
+Best Score: 0.9687073721783932
+              precision    recall  f1-score   support
+
+           0       0.98      0.98      0.98        95
+           1       0.96      0.96      0.96        45
+
+    accuracy                           0.97       140
+   macro avg       0.97      0.97      0.97       140
+weighted avg       0.97      0.97      0.97       140
