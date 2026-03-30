@@ -1,0 +1,1 @@
+python main.py --name {name of folder experiment} --data {path dataset} --target {target columns}
