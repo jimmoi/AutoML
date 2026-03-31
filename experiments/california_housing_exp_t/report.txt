@@ -1,0 +1,24 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_minmax',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   MinMaxScaler())]),
+                                                  ['MedInc', 'HouseAge',
+                                                   'AveRooms', 'AveBedrms',
+                                                   'Population', 'AveOccup',
+                                                   'Latitude', 'Longitude']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_rf', RandomForestRegressor(n_estimators=300))])
+Best Params: {'sk_model_model_rf__n_estimators': 300, 'sk_model_model_rf__max_depth': None, 'sk_model_model_rf__min_samples_split': 2, 'sk_model_model_rf__min_samples_leaf': 1}
+Optimization Time: 4754.67 seconds
+Best Score: 0.8059287187065202
+Mean Squared Error: 0.25092502825682
+R2 Score: 0.8085139582959335
+Mean Absolute Error: 0.32449461816860486
+Mean Absolute Percentage Error: 0.18740102569466802

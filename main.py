@@ -152,7 +152,7 @@ def main(args):
             objective = "r2"
     config["objective"] = objective
     dag = create_pipeline(num_cols, cat_cols, args, limit_n_feature=10,)
-    optimizer = ACOOptimizer(dag, n_ants=30, iterations=25, local_search_iters=5, timeout=100)
+    optimizer = ACOOptimizer(dag, n_ants=20, iterations=10, local_search_iters=5, timeout=1000)
     best_pipeline, best_score, best_params, score_history, pheromone_history, optimization_time = optimizer.optimize(X_train, y_train, verbose=True, scoring=objective)
     print(f"Best Pipeline: {best_pipeline}")
     print(f"Best Score: {best_score}")
