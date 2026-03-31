@@ -1,5 +1,5 @@
 {
-    "experiment_name": "adult_exp",
+    "experiment_name": "Adult_exp",
     "dataset": "datasets/adult.csv",
     "target": "income",
     "task": "classification",

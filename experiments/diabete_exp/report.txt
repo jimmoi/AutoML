@@ -1,9 +1,7 @@
-Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_minmax',
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_none',
                  ColumnTransformer(transformers=[('num',
                                                   Pipeline(steps=[('impute',
-                                                                   SimpleImputer()),
-                                                                  ('scale',
-                                                                   MinMaxScaler())]),
+                                                                   SimpleImputer())]),
                                                   ['age', 'sex', 'bmi', 'bp',
                                                    's1', 's2', 's3', 's4', 's5',
                                                    's6']),
@@ -13,11 +11,11 @@ Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_minmax',
                                                                   ('onehot',
                                                                    OneHotEncoder(handle_unknown='ignore'))]),
                                                   [])])),
-                ('sk_model_model_ridge', Ridge())])
-Best Params: {'sk_model_model_ridge__alpha': 1.0, 'sk_model_model_ridge__solver': 'auto'}
-Optimization Time: 354.80 seconds
-Best Score: 0.456445318663311
-Mean Squared Error: 2865.1816347822473
-R2 Score: 0.45921110402614407
-Mean Absolute Error: 42.908127240528955
-Mean Absolute Percentage Error: 0.37522010053066374
+                ('sk_model_model_ridge', Ridge(alpha=0.1, solver='sparse_cg'))])
+Best Params: {'sk_model_model_ridge__alpha': 0.1, 'sk_model_model_ridge__solver': 'sparse_cg'}
+Optimization Time: 79.39 seconds
+Best Score: 0.4564877525947545
+Mean Squared Error: 2856.6245613461597
+R2 Score: 0.46082620941426045
+Mean Absolute Error: 42.99725353895961
+Mean Absolute Percentage Error: 0.37696499038195824

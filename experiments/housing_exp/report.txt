@@ -1,0 +1,26 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_standard',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   StandardScaler())]),
+                                                  ['Avg. Area Income',
+                                                   'Avg. Area House Age',
+                                                   'Avg. Area Number of Rooms',
+                                                   'Avg. Area Number of '
+                                                   'Bedrooms',
+                                                   'Area Population']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_ridge', Ridge(solver='sag'))])
+Best Params: {'sk_model_model_ridge__alpha': 1.0, 'sk_model_model_ridge__solver': 'sag'}
+Optimization Time: 939.06 seconds
+Best Score: 0.9174143297208206
+Mean Squared Error: 10088990598.46025
+R2 Score: 0.9179973226993953
+Mean Absolute Error: 80878.38707315882
+Mean Absolute Percentage Error: 0.07388397505677635
