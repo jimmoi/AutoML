@@ -1,0 +1,40 @@
+Best Pipeline: Pipeline(steps=[('sk_preprocessor_scaler_robust',
+                 ColumnTransformer(transformers=[('num',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer()),
+                                                                  ('scale',
+                                                                   RobustScaler())]),
+                                                  ['fixed acidity',
+                                                   'volatile acidity',
+                                                   'citric acid',
+                                                   'residual sugar',
+                                                   'chlorides',
+                                                   'free sulfur dioxide',
+                                                   'total sulfur dioxide',
+                                                   'density', 'pH', 'sulphates',
+                                                   'alcohol']),
+                                                 ('cat',
+                                                  Pipeline(steps=[('impute',
+                                                                   SimpleImputer(strategy='most_frequent')),
+                                                                  ('onehot',
+                                                                   OneHotEncoder(handle_unknown='ignore'))]),
+                                                  [])])),
+                ('sk_model_model_gbm',
+                 GradientBoostingClassifier(max_depth=5, n_estimators=200,
+                                            subsample=0.8))])
+Best Params: {'sk_model_model_gbm__n_estimators': 200, 'sk_model_model_gbm__learning_rate': 0.1, 'sk_model_model_gbm__max_depth': 5, 'sk_model_model_gbm__subsample': 0.8}
+Optimization Time: 3037.89 seconds
+Best Score: 0.41164686619178487
+              precision    recall  f1-score   support
+
+           3       0.33      0.20      0.25         5
+           4       0.75      0.36      0.49        25
+           5       0.68      0.67      0.68       291
+           6       0.65      0.75      0.70       432
+           7       0.71      0.60      0.65       192
+           8       0.67      0.46      0.54        35
+           9       0.00      0.00      0.00         0
+
+    accuracy                           0.67       980
+   macro avg       0.54      0.43      0.47       980
+weighted avg       0.68      0.67      0.67       980

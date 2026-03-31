@@ -1,0 +1,12 @@
+{
+    "experiment_name": "winequality-white_exp",
+    "dataset": "datasets\\winequality-white.csv",
+    "target": "quality",
+    "task": "classification",
+    "dropna": false,
+    "num_fill_strategy": "mean",
+    "cat_fill_strategy": "most_frequent",
+    "add_poly": false,
+    "use_smote": false,
+    "objective": "f1_macro"
+}
