@@ -131,7 +131,7 @@ def main(args):
     data_path = Path(args.data)
     if not data_path.exists():
         raise FileNotFoundError(f"Dataset not found at {data_path}")
-    data = pd.read_csv(data_path)
+    data = pd.read_csv(data_path, sep=None, engine='python')
     
     if args.dropna:
         data.dropna(inplace=True)
@@ -213,4 +213,5 @@ if __name__ == "__main__":
     parser.add_argument("--add_poly", type=bool, default=False, help="Add polynomial features")
     parser.add_argument("--use_smote", type=bool, default=False, help="Use SMOTE for oversampling")
     args = parser.parse_args()
+    args.task = args.task.lower()
     main(args)
